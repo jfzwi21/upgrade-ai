@@ -215,6 +215,24 @@
       "model_placeholder": "Modelinizi girin (örn. {{example}})",
       "models_load_failed": "Bu sağlayıcıdan modeller yüklenemedi. Kimlik bilgilerinizi kontrol edin veya model adını manuel olarak girin.",
       "no_tool_calls": "Bu modelin <bold>araç çağırma desteğinin olmadığı</bold> tespit edildi. Yalnızca basit sohbet + RAG desteklenecektir"
+    },
+    "updater": {
+      "check": "Güncellemeleri denetle",
+      "title": "Uygulama güncellemeleri",
+      "checking": "Güncellemeler denetleniyor…",
+      "downloading": "%{{progress}} indiriliyor",
+      "no_release": "GitHub’da henüz bir sürüm yayımlanmadı.",
+      "no_apk": "En son GitHub sürümünde henüz APK yok.",
+      "up_to_date": "Zaten en son sürümü kullanıyorsunuz.",
+      "available_title": "Güncelleme mevcut",
+      "available_message": "{{version}} sürümü mevcut. Şimdi indirip yüklemek istiyor musunuz?",
+      "download_install": "İndir ve yükle",
+      "permission_title": "APK yüklemesine izin ver",
+      "permission_message": "Upgrade AI’ın güncellemeleri yüklemesi için Android izni gerekiyor. “Bu kaynaktan izin ver” seçeneğini açın, uygulamaya dönün ve yeniden denetleyin.",
+      "download_failed_title": "Güncelleme başarısız",
+      "download_failed_message": "Yükleyici indirilemedi veya açılamadı. Bağlantınızı kontrol edip yeniden deneyin.",
+      "check_failed_message": "GitHub Releases denetlenemedi. Bağlantınızı kontrol edip yeniden deneyin.",
+      "check_failed_title": "Güncelleme denetimi başarısız"
     }
   },
   "chat": {

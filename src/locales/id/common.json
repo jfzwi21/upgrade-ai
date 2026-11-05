@@ -215,6 +215,24 @@
       "model_placeholder": "Masukkan model Anda (misalnya {{example}})",
       "models_load_failed": "Tidak dapat memuat model dari penyedia ini. Periksa kredensial Anda atau masukkan nama model secara manual.",
       "no_tool_calls": "Model ini terdeteksi memiliki <bold>tidak ada dukungan pemanggilan alat</bold>. Hanya obrolan sederhana + RAG yang akan didukung"
+    },
+    "updater": {
+      "check": "Periksa pembaruan",
+      "title": "Pembaruan aplikasi",
+      "checking": "Memeriksa pembaruan…",
+      "downloading": "Mengunduh {{progress}}%",
+      "no_release": "Belum ada rilis yang dipublikasikan di GitHub.",
+      "no_apk": "Rilis GitHub terbaru belum menyertakan APK.",
+      "up_to_date": "Anda sudah menggunakan versi terbaru.",
+      "available_title": "Pembaruan tersedia",
+      "available_message": "Versi {{version}} tersedia. Unduh dan instal sekarang?",
+      "download_install": "Unduh dan instal",
+      "permission_title": "Izinkan pemasangan APK",
+      "permission_message": "Android memerlukan izin agar Upgrade AI dapat memasang pembaruan. Aktifkan “Izinkan dari sumber ini”, kembali ke aplikasi, lalu periksa pembaruan lagi.",
+      "download_failed_title": "Pembaruan gagal",
+      "download_failed_message": "Tidak dapat mengunduh atau membuka penginstal. Periksa koneksi lalu coba lagi.",
+      "check_failed_message": "Tidak dapat memeriksa GitHub Releases. Periksa koneksi lalu coba lagi.",
+      "check_failed_title": "Pemeriksaan pembaruan gagal"
     }
   },
   "chat": {

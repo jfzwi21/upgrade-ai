@@ -215,6 +215,24 @@
       "model_placeholder": "Enter your model (e.g. {{example}})",
       "models_load_failed": "Could not load models from this provider. Check your credentials or enter the model name manually.",
       "no_tool_calls": "This model was detected to have <bold>no tool calling support</bold>. Only simple chat + RAG will be supported"
+    },
+    "updater": {
+      "check": "Check for updates",
+      "title": "App updates",
+      "checking": "Checking for updates…",
+      "downloading": "Downloading {{progress}}%",
+      "no_release": "No release has been published on GitHub yet.",
+      "no_apk": "The latest GitHub release does not include an APK yet.",
+      "up_to_date": "You are already using the latest version.",
+      "available_title": "Update available",
+      "available_message": "Version {{version}} is available. Download and install it now?",
+      "download_install": "Download and install",
+      "permission_title": "Allow APK installation",
+      "permission_message": "Android needs permission for Upgrade AI to install updates. Enable “Allow from this source”, return to the app, and check for updates again.",
+      "download_failed_title": "Update failed",
+      "download_failed_message": "Could not download or open the installer. Check your connection and try again.",
+      "check_failed_message": "Could not check GitHub Releases. Check your connection and try again.",
+      "check_failed_title": "Update check failed"
     }
   },
   "chat": {

@@ -215,6 +215,24 @@
       "model_placeholder": "Digite seu modelo (ex: {{example}})",
       "models_load_failed": "Não foi possível carregar os modelos deste provedor. Verifique suas credenciais ou digite o nome do modelo manualmente.",
       "no_tool_calls": "Este modelo foi detectado como tendo <bold>sem suporte a chamadas de ferramentas</bold>. Apenas chat simples + RAG serão suportados"
+    },
+    "updater": {
+      "check": "Verificar atualizações",
+      "title": "Atualizações do app",
+      "checking": "Verificando atualizações…",
+      "downloading": "Baixando {{progress}}%",
+      "no_release": "Ainda não há nenhuma versão publicada no GitHub.",
+      "no_apk": "A versão mais recente do GitHub ainda não inclui um APK.",
+      "up_to_date": "Você já está usando a versão mais recente.",
+      "available_title": "Atualização disponível",
+      "available_message": "A versão {{version}} está disponível. Deseja baixá-la e instalá-la agora?",
+      "download_install": "Baixar e instalar",
+      "permission_title": "Permitir instalação de APK",
+      "permission_message": "O Android precisa permitir que o Upgrade AI instale atualizações. Ative “Permitir desta fonte”, volte ao app e verifique novamente.",
+      "download_failed_title": "Falha na atualização",
+      "download_failed_message": "Não foi possível baixar ou abrir o instalador. Verifique a conexão e tente novamente.",
+      "check_failed_message": "Não foi possível verificar as versões do GitHub. Verifique a conexão e tente novamente.",
+      "check_failed_title": "Falha ao verificar atualizações"
     }
   },
   "chat": {

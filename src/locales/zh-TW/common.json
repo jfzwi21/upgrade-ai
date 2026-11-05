@@ -215,6 +215,24 @@
       "model_placeholder": "輸入您的模型 (例如 {{example}})",
       "models_load_failed": "無法從此提供者載入模型。檢查您的認證或手動輸入模型名稱。",
       "no_tool_calls": "此模型的偵測結果為 <bold>不支援工具呼叫</bold>。僅支援簡單聊天 + RAG"
+    },
+    "updater": {
+      "check": "檢查更新",
+      "title": "應用程式更新",
+      "checking": "正在檢查更新…",
+      "downloading": "正在下載 {{progress}}%",
+      "no_release": "GitHub 尚未發布任何版本。",
+      "no_apk": "最新的 GitHub 版本尚未包含 APK。",
+      "up_to_date": "您已在使用最新版本。",
+      "available_title": "有可用更新",
+      "available_message": "版本 {{version}} 已推出。現在要下載並安裝嗎？",
+      "download_install": "下載並安裝",
+      "permission_title": "允許安裝 APK",
+      "permission_message": "Android 需要允許 Upgrade AI 安裝更新。請開啟「允許來自此來源」，返回應用程式後再次檢查更新。",
+      "download_failed_title": "更新失敗",
+      "download_failed_message": "無法下載或開啟安裝程式。請檢查網路連線後重試。",
+      "check_failed_message": "無法檢查 GitHub Releases。請檢查網路連線後重試。",
+      "check_failed_title": "檢查更新失敗"
     }
   },
   "chat": {

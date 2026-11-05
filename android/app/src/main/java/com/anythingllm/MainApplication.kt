@@ -10,6 +10,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.anythingllm.download.DownloadPackage
 import com.anythingllm.storage.StoragePackage
 import com.anythingllm.vector.VectorBoxPackage
@@ -23,6 +24,7 @@ import com.anythingllm.messaging.MessagingPackage
 import com.anythingllm.alarms.AlarmPackage
 import com.anythingllm.loopbackauth.LoopbackAuthPackage
 import com.anythingllm.termux.TermuxBridgePackage
+import com.anythingllm.updater.InAppUpdaterPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -48,6 +50,7 @@ class MainApplication : Application(), ReactApplication {
             AlarmPackage(),
             LoopbackAuthPackage(),
             TermuxBridgePackage(),
+            InAppUpdaterPackage(),
           )
 
           manuallyRegisteredPackages.forEach { packageInstance ->
@@ -71,6 +74,11 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    CaocConfig.Builder.create()
+      .enabled(true)
+      .showErrorDetails(true)
+      .showRestartButton(true)
+      .apply()
     try {
       loadReactNative(this)
     } catch (error: Throwable) {

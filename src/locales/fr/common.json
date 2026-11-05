@@ -215,6 +215,24 @@
       "model_placeholder": "Entrez votre modèle (par exemple {{example}})",
       "models_load_failed": "Impossible de charger les modèles de ce fournisseur. Vérifiez vos identifiants ou entrez le nom du modèle manuellement.",
       "no_tool_calls": "Ce modèle a été détecté pour ne pas avoir <bold>de support d'appel d'outils</bold>. Seul le chat simple + RAG sera pris en charge"
+    },
+    "updater": {
+      "check": "Rechercher des mises à jour",
+      "title": "Mises à jour de l’application",
+      "checking": "Recherche des mises à jour…",
+      "downloading": "Téléchargement : {{progress}} %",
+      "no_release": "Aucune version n’a encore été publiée sur GitHub.",
+      "no_apk": "La dernière version GitHub ne contient pas encore d’APK.",
+      "up_to_date": "Vous utilisez déjà la dernière version.",
+      "available_title": "Mise à jour disponible",
+      "available_message": "La version {{version}} est disponible. Voulez-vous la télécharger et l’installer maintenant ?",
+      "download_install": "Télécharger et installer",
+      "permission_title": "Autoriser l’installation d’APK",
+      "permission_message": "Android doit autoriser Upgrade AI à installer les mises à jour. Activez « Autoriser depuis cette source », revenez dans l’application et relancez la recherche.",
+      "download_failed_title": "Échec de la mise à jour",
+      "download_failed_message": "Impossible de télécharger ou d’ouvrir l’installateur. Vérifiez votre connexion et réessayez.",
+      "check_failed_message": "Impossible de consulter les versions GitHub. Vérifiez votre connexion et réessayez.",
+      "check_failed_title": "Échec de la vérification"
     }
   },
   "chat": {

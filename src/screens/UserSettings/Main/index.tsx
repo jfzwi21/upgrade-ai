@@ -1,4 +1,4 @@
-import { Linking, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { Alert, DeviceEventEmitter, Linking, NativeModules, Platform, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import SafeView from '@/components/SafeView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -15,6 +15,7 @@ import {
   Sparkle,
   TextAa,
   Translate,
+  ArrowClockwise,
 } from 'phosphor-react-native';
 import { useTranslation } from 'react-i18next';
 import i18n, { LANGUAGES, currentLanguage, tKey } from '@/i18n';
@@ -25,7 +26,7 @@ import uiStore from '@/store/UIStore';
 import { PATHS } from '@/utils/paths';
 import useHighjackBackButtonPress from '@/hooks/useHighjackBackButtonPress';
 import AwaitableAlert from '@/components/AwaitableAlert';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import useLLMPreference from '@/hooks/useLLMPreference';
 import { startCase } from 'lodash';
@@ -117,6 +118,59 @@ export function MainView({ goToPage }: MainViewProps) {
   const { llmPreferences, providerToName } = useLLMPreference();
   const scrollViewRef = useRef<ScrollView>(null);
   const [changelogVisible, setChangelogVisible] = useState(false);
+  const [updaterStatus, setUpdaterStatus] = useState<'idle' | 'checking' | 'downloading'>('idle');
+  const [updateProgress, setUpdateProgress] = useState(0);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = DeviceEventEmitter.addListener('InAppUpdateProgress', (event: { progress?: number }) => {
+      setUpdateProgress(Math.max(0, Math.min(100, Math.round(event.progress ?? 0))));
+    });
+    return () => subscription.remove();
+  }, []);
+  async function downloadAndInstallUpdate() {
+    setUpdaterStatus('downloading');
+    setUpdateProgress(0);
+    try {
+      const result = await NativeModules.InAppUpdaterModule.downloadAndInstall();
+      if (result?.status === 'permission_required') {
+        Alert.alert(t('settings.updater.permission_title'), t('settings.updater.permission_message'), [
+          { text: t('common.ok') },
+        ]);
+      }
+    } catch (error) {
+      Alert.alert(t('settings.updater.download_failed_title'), t('settings.updater.download_failed_message'));
+    } finally {
+      setUpdaterStatus('idle');
+    }
+  }
+  async function checkForUpdates() {
+    if (updaterStatus !== 'idle') return;
+    setUpdaterStatus('checking');
+    try {
+      const result = await NativeModules.InAppUpdaterModule.checkForUpdate();
+      if (result?.status === 'no_release') {
+        Alert.alert(t('settings.updater.title'), t('settings.updater.no_release'));
+      } else if (result?.status === 'no_apk') {
+        Alert.alert(t('settings.updater.title'), t('settings.updater.no_apk'));
+      } else if (result?.status === 'up_to_date') {
+        Alert.alert(t('settings.updater.title'), t('settings.updater.up_to_date'));
+      } else if (result?.status === 'available') {
+        const shouldInstall = await AwaitableAlert(
+          t('settings.updater.available_title'),
+          t('settings.updater.available_message', { version: result.version }),
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('settings.updater.download_install') },
+        );
+        if (shouldInstall) await downloadAndInstallUpdate();
+      } else {
+        throw new Error('Unexpected update status');
+      }
+    } catch (error) {
+      Alert.alert(t('settings.updater.check_failed_title'), t('settings.updater.check_failed_message'));
+    } finally {
+      setUpdaterStatus('idle');
+    }
+  }
   function goBack() {
     navigation.reset({
       index: 0,
@@ -332,8 +386,28 @@ export function MainView({ goToPage }: MainViewProps) {
                 title={t('settings.utility.anonymous_telemetry')}
                 icon={<ChartBar size={18} color="#FFF" />}
                 onPress={() => goToPage('anonymous_telemetry')}
-                borderBottom={UTILITY_LINKS.length > 0}
+                borderBottom={true}
               />
+              {Platform.OS === 'android' && (
+                <SupportItem
+                  title={t('settings.updater.check')}
+                  icon={<ArrowClockwise size={18} color="#FFF" />}
+                  value={updaterStatus === 'checking'
+                    ? t('settings.updater.checking')
+                    : updaterStatus === 'downloading'
+                      ? t('settings.updater.downloading', { progress: updateProgress })
+                      : undefined}
+                  onPress={checkForUpdates}
+                />
+              )}
+              {Platform.OS === 'android' && updaterStatus === 'downloading' && (
+                <View
+                  accessibilityRole="progressbar"
+                  accessibilityValue={{ min: 0, max: 100, now: updateProgress }}
+                  style={{ height: 4, backgroundColor: '#27282A', borderRadius: 2, overflow: 'hidden' }}>
+                  <View style={{ width: `${updateProgress}%`, height: '100%', backgroundColor: '#F3F3F3' }} />
+                </View>
+              )}
               {UTILITY_LINKS.map((link, index) => {
                 return (
                   <SupportItem

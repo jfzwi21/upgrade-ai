@@ -215,6 +215,24 @@
       "model_placeholder": "モデルを入力してください（例：{{example}}）",
       "models_load_failed": "このプロバイダーからモデルを読み込めませんでした。認証情報を確認するか、モデル名を手動で入力してください。",
       "no_tool_calls": "このモデルは<bold>ツール呼び出しサポートなし</bold>が検出されました。シンプルなチャット+RAGのみがサポートされます"
+    },
+    "updater": {
+      "check": "アップデートを確認",
+      "title": "アプリのアップデート",
+      "checking": "アップデートを確認中…",
+      "downloading": "{{progress}}% ダウンロード中",
+      "no_release": "GitHub にまだリリースが公開されていません。",
+      "no_apk": "最新の GitHub リリースにはまだ APK が含まれていません。",
+      "up_to_date": "すでに最新バージョンをお使いです。",
+      "available_title": "アップデートがあります",
+      "available_message": "バージョン {{version}} が公開されています。今すぐダウンロードしてインストールしますか？",
+      "download_install": "ダウンロードしてインストール",
+      "permission_title": "APK のインストールを許可",
+      "permission_message": "Upgrade AI がアップデートをインストールするには Android の許可が必要です。「この提供元を許可」を有効にしてアプリに戻り、もう一度確認してください。",
+      "download_failed_title": "アップデートに失敗しました",
+      "download_failed_message": "インストーラーをダウンロードまたは開けませんでした。接続を確認して再試行してください。",
+      "check_failed_message": "GitHub Releases を確認できませんでした。接続を確認して再試行してください。",
+      "check_failed_title": "更新の確認に失敗しました"
     }
   },
   "chat": {

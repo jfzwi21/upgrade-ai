@@ -215,6 +215,24 @@
       "model_placeholder": "Nhập mô hình của bạn (ví dụ: {{example}})",
       "models_load_failed": "Không thể tải mô hình từ nhà cung cấp này. Kiểm tra thông tin đăng nhập của bạn hoặc nhập tên mô hình theo cách thủ công.",
       "no_tool_calls": "Mô hình này được phát hiện có <bold>không hỗ trợ gọi công cụ</bold>. Chỉ trò chuyện đơn giản + RAG sẽ được hỗ trợ"
+    },
+    "updater": {
+      "check": "Kiểm tra bản cập nhật",
+      "title": "Bản cập nhật ứng dụng",
+      "checking": "Đang kiểm tra bản cập nhật…",
+      "downloading": "Đang tải {{progress}}%",
+      "no_release": "Chưa có bản phát hành nào được đăng trên GitHub.",
+      "no_apk": "Bản phát hành GitHub mới nhất chưa có APK.",
+      "up_to_date": "Bạn đang dùng phiên bản mới nhất.",
+      "available_title": "Có bản cập nhật",
+      "available_message": "Đã có phiên bản {{version}}. Tải xuống và cài đặt ngay?",
+      "download_install": "Tải xuống và cài đặt",
+      "permission_title": "Cho phép cài đặt APK",
+      "permission_message": "Android cần cấp quyền để Upgrade AI cài đặt bản cập nhật. Bật “Cho phép từ nguồn này”, quay lại ứng dụng và kiểm tra lại.",
+      "download_failed_title": "Cập nhật thất bại",
+      "download_failed_message": "Không thể tải xuống hoặc mở trình cài đặt. Kiểm tra kết nối rồi thử lại.",
+      "check_failed_message": "Không thể kiểm tra GitHub Releases. Kiểm tra kết nối rồi thử lại.",
+      "check_failed_title": "Kiểm tra cập nhật thất bại"
     }
   },
   "chat": {

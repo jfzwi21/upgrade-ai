@@ -215,6 +215,24 @@
       "model_placeholder": "Wpisz swój model (np. {{example}})",
       "models_load_failed": "Nie można załadować modeli od tego dostawcy. Sprawdź swoje poświadczenia lub wpisz nazwę modelu ręcznie.",
       "no_tool_calls": "Stwierdzono, że ten model ma <bold>brak obsługi wywołań narzędzi</bold>. Obsługiwane będą tylko prosty czat + RAG"
+    },
+    "updater": {
+      "check": "Sprawdź aktualizacje",
+      "title": "Aktualizacje aplikacji",
+      "checking": "Sprawdzanie aktualizacji…",
+      "downloading": "Pobieranie: {{progress}}%",
+      "no_release": "Nie opublikowano jeszcze żadnego wydania na GitHubie.",
+      "no_apk": "Najnowsze wydanie GitHub nie zawiera jeszcze pliku APK.",
+      "up_to_date": "Korzystasz już z najnowszej wersji.",
+      "available_title": "Dostępna aktualizacja",
+      "available_message": "Wersja {{version}} jest dostępna. Pobrać i zainstalować ją teraz?",
+      "download_install": "Pobierz i zainstaluj",
+      "permission_title": "Zezwól na instalowanie APK",
+      "permission_message": "Android musi zezwolić aplikacji Upgrade AI na instalowanie aktualizacji. Włącz „Zezwalaj z tego źródła”, wróć do aplikacji i ponownie sprawdź aktualizacje.",
+      "download_failed_title": "Aktualizacja nie powiodła się",
+      "download_failed_message": "Nie można pobrać ani otworzyć instalatora. Sprawdź połączenie i spróbuj ponownie.",
+      "check_failed_message": "Nie można sprawdzić wydań GitHub. Sprawdź połączenie i spróbuj ponownie.",
+      "check_failed_title": "Sprawdzanie aktualizacji nie powiodło się"
     }
   },
   "chat": {

@@ -215,6 +215,24 @@
       "model_placeholder": "Voer je model in (bijv. {{example}})",
       "models_load_failed": "Kon modellen van deze provider niet laden. Controleer je referenties of voer de modelnaam handmatig in.",
       "no_tool_calls": "Dit model werd gedetecteerd als <bold>geen ondersteuning voor hulpmiddeloproepen</bold>. Alleen eenvoudige chat + RAG zal worden ondersteund"
+    },
+    "updater": {
+      "check": "Controleren op updates",
+      "title": "App-updates",
+      "checking": "Controleren op updates…",
+      "downloading": "Downloaden: {{progress}}%",
+      "no_release": "Er is nog geen release op GitHub gepubliceerd.",
+      "no_apk": "De nieuwste GitHub-release bevat nog geen APK.",
+      "up_to_date": "Je gebruikt al de nieuwste versie.",
+      "available_title": "Update beschikbaar",
+      "available_message": "Versie {{version}} is beschikbaar. Nu downloaden en installeren?",
+      "download_install": "Downloaden en installeren",
+      "permission_title": "APK-installatie toestaan",
+      "permission_message": "Android moet Upgrade AI toestemming geven om updates te installeren. Schakel ‘Toestaan vanaf deze bron’ in, ga terug naar de app en controleer opnieuw.",
+      "download_failed_title": "Update mislukt",
+      "download_failed_message": "De installer kan niet worden gedownload of geopend. Controleer je verbinding en probeer het opnieuw.",
+      "check_failed_message": "GitHub Releases kunnen niet worden gecontroleerd. Controleer je verbinding en probeer het opnieuw.",
+      "check_failed_title": "Controleren op updates mislukt"
     }
   },
   "chat": {

@@ -96,7 +96,7 @@
       "termux_guide_install_description": "Use either F-Droid or the official Termux GitHub releases. Open one of the links below and install the current Termux app.",
       "termux_guide_fdroid": "Open F-Droid",
       "termux_guide_github": "Official GitHub releases",
-      "termux_guide_store_warning": "The Google Play build is experimental and may have missing features or bugs. For the stable build, use F-Droid or the official GitHub releases.",
+      "termux_guide_store_warning": "Do not use the Google Play build for this integration; it is experimental and may be missing features or have bugs. Use the stable F-Droid or official GitHub release instead.",
       "termux_guide_prepare_title": "Allow external apps",
       "termux_guide_prepare_description": "Open Termux, then paste this command into its terminal and run it. Use Copy to copy the full command.",
       "termux_guide_permission_title": "Allow Upgrade AI to run commands",

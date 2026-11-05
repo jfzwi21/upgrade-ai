@@ -96,7 +96,7 @@
       "termux_guide_install_description": "استخدم F-Droid أو إصدارات Termux الرسمية على GitHub. افتح أحد الرابطين أدناه وثبّت إصدار Termux الحالي.",
       "termux_guide_fdroid": "فتح F-Droid",
       "termux_guide_github": "إصدارات GitHub الرسمية",
-      "termux_guide_store_warning": "نسخة Google Play تجريبية، وقد تفتقد بعض الميزات أو تحتوي أخطاء. للإصدار المستقر، استخدم F-Droid أو إصدارات GitHub الرسمية.",
+      "termux_guide_store_warning": "لا أنصح بنسخة Google Play لهذا التكامل؛ فهي تجريبية وقد تفتقد ميزات أو تحتوي أخطاء. استخدم الإصدار المستقر من F-Droid أو GitHub الرسمي.",
       "termux_guide_prepare_title": "السماح للتطبيقات الخارجية",
       "termux_guide_prepare_description": "افتح Termux، ثم الصق هذا الأمر في الطرفية وشغّله. اضغط «نسخ» لنسخ الأمر كاملًا.",
       "termux_guide_permission_title": "السماح لـ Upgrade AI بتشغيل الأوامر",

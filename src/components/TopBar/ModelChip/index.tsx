@@ -1,0 +1,736 @@
+import React, {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  View,
+  TouchableOpacity,
+  Text,
+  ActivityIndicator,
+  TextInput,
+  Keyboard,
+  Image,
+  ViewStyle,
+} from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import {
+  BottomSheetBackdrop,
+  BottomSheetBackdropProps,
+  BottomSheetModal,
+  BottomSheetFlatList,
+  useBottomSheetInternal,
+} from '@gorhom/bottom-sheet';
+import { ArrowsClockwise, Check, MagnifyingGlass, Tag, Warning, WarningCircle, X } from 'phosphor-react-native';
+import { findIconByModelName, findIconByProvider } from '@/components/MonoProviderIcon';
+import useLlmPreference from '@/hooks/useLLMPreference';
+import useModelManager from '@/hooks/useModelManager';
+import * as RNFS from '@dr.pogodin/react-native-fs';
+import { resolveDestinationPathFromGGUFUrl } from '@/utils/models/defaults';
+import {
+  useBottomSheet,
+  BOTTOM_SHEET_NAMES,
+} from '@/contexts/BottomSheetContext';
+import ModelCard from '@/components/ModelCard';
+import {
+  flattenModelSections,
+  groupModelsByProvider,
+  ProviderSectionHeader,
+} from '@/components/ModelCard/ProviderSections';
+import { defaultModels } from '@/utils/models';
+import { Model } from '@/utils/types';
+import { WorkspaceType } from '@/database/models/Workspace';
+import { showToast } from '@/utils/Notification';
+import uiStore from '@/store/UIStore';
+import { AVAILABLE_LLM_PROVIDERS } from '@/utils/llmproviders';
+import HuggingFaceImport from '@/components/HuggingFaceImport';
+import AddFromHuggingFaceCard from '@/components/HuggingFaceImport/AddCard';
+import useModelFit from '@/hooks/useModelFit';
+import ImportedModels, { ImportedModel } from '@/utils/models/imported';
+import { IAvailableModel } from '@/utils/AiProviders/baseOpenAILikeProvider';
+import useLowMemoryStatus from '@/hooks/useLowMemoryStatus';
+import LowMemoryModal, { LOW_MEMORY_COLOR } from '@/components/LowMemoryModal';
+import { useTranslation } from 'react-i18next';
+import useProviderSwitcher from '@/hooks/useProviderSwitcher';
+import ProviderPicker, { ProviderBar } from './ProviderPicker';
+import ProviderConnectForm from './ProviderConnectForm';
+
+// Provider bar height (see `ProviderBar`) and the gap below it - keeps status messages centered under it.
+const HEADER_HEIGHT = 44;
+const HEADER_GAP = 16;
+// Short model lists fit on screen - only offer search once there is something to sift through.
+const MIN_MODELS_FOR_SEARCH = 5;
+
+function getPresetModelName(llmPreferences: { provider: string; config: any }) {
+  if (llmPreferences.provider !== 'native') return llmPreferences.config.model;
+  const modelDefinition = defaultModels.find(model => model.id === llmPreferences.config.model) as Model;
+  return modelDefinition?.name || llmPreferences.config.model;
+}
+
+function modelNameToDisplayName(modelName?: string | null) {
+  if (!modelName) return null; // undetermined model
+
+  // Full file path specific (windows: C:\Users\...\..., mac: /Users/...\...)
+  if (modelName.includes('\\') || modelName.startsWith('/')) {
+    return modelName.split(/[\\/]/).pop()?.replaceAll(new RegExp('[-.]?gguf$', 'gi'), '') // Remove -gguf/.gguf suffix
+      ?.replaceAll(new RegExp('[-_]', 'g'), ' ') // Replace - and _ with space
+      ?.replaceAll(new RegExp('chat -*', 'g'), '') // Replace cgguf with gguf
+      ?.replace(/^./, str => str.toUpperCase()); // Capitalize first letter
+  }
+
+  // General model name format: <provider>/<model-name>
+  return modelName
+    .split('/')
+    .pop()
+    ?.replaceAll(new RegExp('[-.]?gguf$', 'gi'), '') // Remove -gguf/.gguf suffix
+    ?.replaceAll(new RegExp('-', 'g'), ' ') // Replace - with space
+    ?.replace(/^./, str => str.toUpperCase()); // Capitalize first letter
+}
+
+export default function ModelChip({ workspace }: { workspace: WorkspaceType }) {
+  const { t } = useTranslation();
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const { registerSheet, presentSheet, dismissSheet } = useBottomSheet();
+  const { llmPreferences, LLMProvider } = useLlmPreference();
+  const [modelName, setModelName] = useState<string | null>(null);
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.7}
+      />
+    ),
+    [],
+  );
+
+  /**
+   * Fetch the model name from the remote workspace.
+   * Updates the state of the model name as well
+   */
+  async function fetchRemoteModelName() {
+    if (!workspace?.isRemote) return null;
+    const model = await workspace.remoteModelTag();
+    setModelName(model);
+  }
+
+  useEffect(() => {
+    registerSheet(BOTTOM_SHEET_NAMES.MODEL_CHIP_SELECTION, bottomSheetRef);
+  }, [registerSheet]);
+
+  useEffect(() => {
+    let subscription: { remove: () => void } | null = null;
+    if (workspace?.isRemote) {
+      fetchRemoteModelName();
+      subscription = uiStore.emitter.addListener(uiStore.globalEvents.CHAT_HISTORY_REFRESHED, fetchRemoteModelName);
+    } else setModelName(getPresetModelName(llmPreferences));
+
+    // Only drop our own subscription - the chip is also mounted by the Quick Actions card.
+    return () => subscription?.remove();
+    // llmPreferences loads async after mount - without it in the deps a chip mounted before the
+    // preference resolved (Home, the loading view) stays on "No model loaded".
+  }, [workspace, llmPreferences]);
+
+  // If the model name is not set and the workspace is remote, we don't want to show the model chip
+  // since it will show "No model loaded" which is confusing
+  if (!modelName && workspace?.isRemote) return null;
+  return (
+    <Fragment>
+      <View className="flex flex-row items-center" style={{ gap: 6 }}>
+        <LowMemoryIndicator
+          provider={LLMProvider}
+          enabled={llmPreferences.provider === 'native' && !workspace?.isRemote && !!modelName}
+        />
+        <TouchableOpacity
+          onPress={() => {
+            if (workspace?.isRemote) return showToast(t('top_bar.model_chip.remote_managed'));
+            presentSheet(BOTTOM_SHEET_NAMES.MODEL_CHIP_SELECTION)
+          }}
+          style={{ marginTop: -5, maxWidth: 200 }}
+          className={`rounded-full ${!modelName ? 'bg-red-500/20' : 'bg-white/10'
+            }`}>
+          <View className="flex flex-row items-center justify-center" style={{ gap: 4, paddingVertical: 4, paddingHorizontal: 12 }}>
+            <ProviderIcon
+              provider={llmPreferences.provider}
+              // On-device `modelName` is the friendly display name; the raw id (eg. `unsloth/Qwen3.5-2B-GGUF`) matches more reliably.
+              modelName={llmPreferences.provider === 'native' ? llmPreferences.config?.model || modelName : modelName}
+            />
+            <Text
+              style={{ fontSize: 14 }}
+              className={`${!modelName ? 'text-red-500' : 'text-white'}`}
+              numberOfLines={1}
+              ellipsizeMode="middle">
+              {modelNameToDisplayName(modelName) || t('top_bar.model_chip.no_model_loaded')}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        index={0}
+        snapPoints={['50%', '95%']}
+        enableDynamicSizing={false}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: '#1B1B1E' }}
+        handleIndicatorStyle={{
+          backgroundColor: '#9F9FA0',
+          width: 45,
+          margin: 10,
+        }}
+        enablePanDownToClose={true}
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+        onDismiss={() => dismissSheet(BOTTOM_SHEET_NAMES.MODEL_CHIP_SELECTION)}>
+        <ModelSheetContent bottomSheetRef={bottomSheetRef} />
+      </BottomSheetModal>
+    </Fragment>
+  );
+}
+
+/**
+ * Close the sheet from inside its own content. Goes through the sheet ref rather than
+ * `dismissSheet()` so the active sheet only clears in `onDismiss`, once the close animation is done.
+ * Clearing it early lets the prompt input re-present while this sheet is still closing - the two
+ * collide in the modal stack and the chip sheet can never be opened again.
+ */
+function closeModelSheet(bottomSheetRef: React.RefObject<BottomSheetModal | null>) {
+  bottomSheetRef.current?.dismiss();
+}
+
+type SheetView ={ name: 'models' } | { name: 'providers' } | { name: 'connect'; provider: string };
+
+/**
+ * Everything inside the chip's sheet: the model list for the active provider, plus an in-sheet
+ * provider picker and connection form so switching providers never has to leave the chat.
+ * The sheet unmounts its content on dismiss, so it always reopens on the model list.
+ */
+function ModelSheetContent({ bottomSheetRef }: { bottomSheetRef: React.RefObject<BottomSheetModal | null> }) {
+  const { llmPreferences, LLMProvider } = useLlmPreference();
+  const { configuredProviders, switchProvider } = useProviderSwitcher();
+  const [view, setView] = useState<SheetView>({ name: 'models' });
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  // Ready-to-use providers switch in one tap; anything else needs its connection details first.
+  const pickProvider = async (provider: string) => {
+    if (provider === llmPreferences.provider) return setView({ name: 'models' });
+    if (provider !== 'native' && !configuredProviders.includes(provider)) return setView({ name: 'connect', provider });
+    setIsSwitching(true);
+    try {
+      await switchProvider(provider);
+      setView({ name: 'models' });
+    } finally {
+      setIsSwitching(false);
+    }
+  };
+
+  if (view.name === 'providers') {
+    return (
+      <ProviderPicker
+        currentProvider={llmPreferences.provider}
+        configuredProviders={configuredProviders}
+        disabled={isSwitching}
+        onSelect={pickProvider}
+        onEdit={provider => setView({ name: 'connect', provider })}
+        onBack={() => setView({ name: 'models' })}
+      />
+    );
+  }
+
+  if (view.name === 'connect') {
+    return (
+      <ProviderConnectForm
+        key={view.provider}
+        provider={view.provider}
+        onBack={() => setView({ name: 'providers' })}
+        onSave={async (config, listed) => {
+          await switchProvider(view.provider, config);
+          // A hand-typed model means the provider cannot list models, so there is no list to show.
+          if (listed) setView({ name: 'models' });
+          else closeModelSheet(bottomSheetRef);
+        }}
+      />
+    );
+  }
+
+  const header = <ProviderBar provider={llmPreferences.provider} onPress={() => setView({ name: 'providers' })} />;
+  return LLMProvider?.isExternalProvider
+    ? (
+      <ExternalProviderModels
+        bottomSheetRef={bottomSheetRef}
+        header={header}
+        onEditConnection={() => setView({ name: 'connect', provider: llmPreferences.provider })}
+      />
+    )
+    : <AvailableModels bottomSheetRef={bottomSheetRef} header={header} />;
+}
+
+export interface AvailableModel {
+  id: string;
+  name: string;
+  size: number;
+  modelId: string;
+  downloadUrl: string;
+  description: string;
+  isPreset: boolean;
+  provider?: string;
+  isUnknown?: boolean;
+  isImported?: boolean;
+  imageUrl?: string | null;
+}
+
+function AvailableModels({
+  bottomSheetRef,
+  header,
+}: {
+  bottomSheetRef: React.RefObject<BottomSheetModal | null>;
+  header: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const { llmPreferences, LLMProvider, isLoading, fetchLLMPreference } = useLlmPreference();
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [view, setView] = useState<'list' | 'import'>('list');
+  const [importQuery, setImportQuery] = useState('');
+  const searchInputRef = useRef(null);
+  const isNative = llmPreferences.provider === 'native';
+
+  const {
+    modelDownloadUrl,
+    downloadProgress,
+    downloadedModels,
+    selectedModel,
+    downloadModel,
+    cancelDownload,
+    uninstallModel,
+    selectModel,
+    runPreDownloadConfirmations,
+  } = useModelManager({ llmPreferences, fetchLLMPreference, LLMProvider });
+
+  const fetchModels = useCallback(async () => {
+    // External providers (LM Studio, Ollama, OpenAI-compatible, ...) render
+    // `ExternalProviderModels` instead - this sheet is on-device only.
+    if (LLMProvider && !LLMProvider.isExternalProvider) {
+      const models = await LLMProvider.availableModels() as AvailableModel[];
+      setAvailableModels(models);
+    } else setAvailableModels([]);
+  }, [LLMProvider]);
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
+  const openImport = (prefill = '') => {
+    setImportQuery(prefill);
+    setView('import');
+  };
+
+  /**
+   * The user picked a quant in the import view. Run the usual network / size confirmations
+   * first so a "Cancel" leaves them on the quant list; only once approved do we remember the
+   * model so it shows up in the list (and survives restarts), go back to the list and download.
+   */
+  const importAndDownload = async (imported: ImportedModel) => {
+    const model: AvailableModel = {
+      id: imported.modelId,
+      modelId: imported.modelId,
+      name: imported.name,
+      description: imported.description,
+      size: imported.size,
+      downloadUrl: imported.downloadUrl,
+      isPreset: false,
+      isImported: true,
+      provider: imported.author,
+    };
+    const onDisk = await RNFS.exists(resolveDestinationPathFromGGUFUrl(model.downloadUrl));
+    if (!onDisk && !(await runPreDownloadConfirmations(model))) return false;
+    await ImportedModels.add(imported);
+    await fetchModels();
+    setView('list');
+    setSearchQuery('');
+    return downloadModel(model, false);
+  };
+
+  const filteredModels = useMemo(() => {
+    return availableModels.filter(
+      model =>
+        (model.name || model.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (model.description || '')
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()),
+    );
+  }, [availableModels, searchQuery]);
+
+  // Presets first, then grouped by provider, then anything found in storage we don't recognise.
+  const listItems = useMemo(
+    () => flattenModelSections(groupModelsByProvider(filteredModels)),
+    [filteredModels],
+  );
+
+  // Memory badges for every row plus a "Recommended" callout on the preset that suits this phone.
+  const presets = useMemo(() => availableModels.filter(m => m.isPreset), [availableModels]);
+  const { fitFor, recommendedId } = useModelFit(presets);
+
+  if (isLoading) return <ActivityIndicator size="large" color="white" />;
+
+  if (view === 'import') {
+    return (
+      <View className="flex flex-col w-full h-full pt-2">
+        <HuggingFaceImport
+          initialQuery={importQuery}
+          onDownload={importAndDownload}
+          installedModelIds={availableModels.filter(m => m.isImported && downloadedModels[m.modelId]).map(m => m.modelId)}
+          activeDownloadUrl={modelDownloadUrl}
+          downloadProgress={downloadProgress}
+          onBack={() => setView('list')}
+          onInputFocus={() => bottomSheetRef.current?.snapToIndex(1)}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex flex-col items-center justify-center gap-y-4 w-full h-full">
+      {header}
+      {availableModels.length >= MIN_MODELS_FOR_SEARCH && (
+        <View className="flex flex-row items-center mx-6 bg-[#27282A] rounded-lg px-4">
+          <MagnifyingGlass size={20} weight="bold" color="white" />
+          <TextInput
+            ref={searchInputRef}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t('common.search')}
+            placeholderTextColor="#9F9FA0"
+            className="flex-1 h-[38px] ml-2 text-white"
+            scrollEnabled={false}
+            onFocus={() => {
+              bottomSheetRef.current?.snapToIndex(1);
+              const keyboardListener = Keyboard.addListener(
+                'keyboardDidShow',
+                () => {
+                  bottomSheetRef.current?.snapToIndex(1);
+                },
+              );
+
+              return () => {
+                keyboardListener.remove();
+              };
+            }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={20} color="white" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {!filteredModels.length && (
+        <View className="w-full px-5" style={{ gap: 12 }}>
+          <Text className="text-white text-sm text-center pt-4">
+            {t('top_bar.model_chip.no_models_found', { query: searchQuery })}
+          </Text>
+          {isNative && (
+            <AddFromHuggingFaceCard
+              onPress={() => openImport(searchQuery)}
+              hint={t('top_bar.model_chip.hf_lookup_hint', { query: searchQuery })}
+            />
+          )}
+        </View>
+      )}
+      {filteredModels.length > 0 && (
+        <BottomSheetFlatList
+          data={listItems}
+          keyExtractor={item => item.key}
+          className="w-full"
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingBottom: 100,
+            gap: 10,
+          }}
+          showsVerticalScrollIndicator={true}
+          scrollEnabled={true}
+          ListFooterComponent={isNative ? <AddFromHuggingFaceCard onPress={() => openImport()} /> : null}
+          renderItem={({ item }) => {
+            if (item.type === 'header') return <ProviderSectionHeader title={item.title} />;
+
+            const model = item.model;
+            return (
+              <ModelCard
+                model={model}
+                isSelected={selectedModel === model.modelId}
+                isDownloaded={downloadedModels[model.modelId]}
+                modelDownloadUrl={modelDownloadUrl}
+                downloadProgress={downloadProgress}
+                memoryFit={isNative ? fitFor(model) : null}
+                isRecommended={isNative && model.id === recommendedId}
+                onSelect={() => {
+                  if (llmPreferences.provider === 'native') return downloadModel(model);
+                  else return selectModel({ modelId: model.id }); // Generic OpenAI /models results
+                }}
+                onUninstall={() => uninstallModel(model)}
+                onCancelDownload={cancelDownload}
+              />
+            );
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Model picker for external providers (OpenAI, OpenRouter, Ollama, LM Studio, generic OpenAI).
+ * Lists whatever the provider's `/models` endpoint returns and swaps the saved model in place.
+ * Providers that cannot list models (or a generic endpoint without `/models`) get an error
+ * state pointing the user to the settings screen instead.
+ */
+function ExternalProviderModels({
+  bottomSheetRef,
+  header,
+  onEditConnection,
+}: {
+  bottomSheetRef: React.RefObject<BottomSheetModal | null>;
+  header: React.ReactNode;
+  onEditConnection: () => void;
+}) {
+  const { t } = useTranslation();
+  const { llmPreferences, LLMProvider, updateLLMPreference, providerToName } = useLlmPreference();
+  const [models, setModels] = useState<IAvailableModel[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const providerName = providerToName(llmPreferences.provider);
+  const currentModelId: string | undefined = llmPreferences.config?.model;
+  const { baseUrl, apiKey } = llmPreferences.config || {};
+  // Picking a model rebuilds the provider instance; reading it through a ref keeps that from
+  // re-triggering the fetch - only a change to the connection itself should reload the list.
+  const providerRef = useRef(LLMProvider);
+  providerRef.current = LLMProvider;
+
+  const fetchModels = useCallback(async () => {
+    const provider = providerRef.current;
+    if (!provider) return;
+    setStatus('loading');
+    try {
+      // Every provider swallows its own request errors and resolves to `[]`, so an
+      // empty list is our only signal that the endpoint is missing or unreachable.
+      // The provider union has differing `availableModels` signatures; external providers all
+      // resolve to the OpenAI `/models` shape.
+      const result = await (provider as { availableModels: () => Promise<IAvailableModel[]> }).availableModels();
+      const found = (Array.isArray(result) ? result : []).filter(model => !!model?.id);
+      if (!found.length) throw new Error('No models returned');
+      setModels(found);
+      setStatus('ready');
+    } catch (error) {
+      console.log(`[ModelChip] Could not list models for ${llmPreferences.provider}`, error);
+      setModels([]);
+      setStatus('error');
+    }
+  }, [llmPreferences.provider, baseUrl, apiKey, providerName]);
+
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
+  const filteredModels = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return models;
+    return models.filter(model =>
+      model.id.toLowerCase().includes(query) ||
+      ((model as { name?: string }).name || '').toLowerCase().includes(query),
+    );
+  }, [models, searchQuery]);
+
+  const selectModel = async (modelId: string) => {
+    if (isSaving) return;
+    if (modelId === currentModelId) return closeModelSheet(bottomSheetRef);
+    setIsSaving(true);
+    try {
+      await updateLLMPreference(llmPreferences.provider, { ...llmPreferences.config, model: modelId });
+      closeModelSheet(bottomSheetRef);
+    } catch (error) {
+      console.error('[ModelChip] Failed to switch model', error);
+      showToast(t('top_bar.model_chip.switch_failed'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (status === 'loading') {
+    return (
+      <View className="w-full" style={{ gap: HEADER_GAP }}>
+        {header}
+        <VisibleSheetCenter inset={HEADER_HEIGHT + HEADER_GAP} style={{ gap: 12 }}>
+          <ActivityIndicator size="large" color="white" />
+          <Text className="text-[#9F9FA0] text-sm">{t('top_bar.model_chip.loading_models', { provider: providerName })}</Text>
+        </VisibleSheetCenter>
+      </View>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <View className="w-full" style={{ gap: HEADER_GAP }}>
+        {header}
+        <VisibleSheetCenter inset={HEADER_HEIGHT + HEADER_GAP} style={{ gap: 12, paddingHorizontal: 32 }}>
+          <WarningCircle size={40} color="#f87171" weight="bold" />
+          <Text className="text-white text-base font-semibold text-center">
+            {t('top_bar.model_chip.list_failed_title', { provider: providerName })}
+          </Text>
+          <Text className="text-[#9F9FA0] text-sm text-center">
+            {t('top_bar.model_chip.list_failed_description')}
+          </Text>
+          <TouchableOpacity
+            onPress={fetchModels}
+            className="flex flex-row items-center bg-white/10 rounded-lg px-4 py-2 mt-2"
+            style={{ gap: 6 }}>
+            <ArrowsClockwise size={16} color="white" weight="bold" />
+            <Text className="text-white text-sm font-medium">{t('top_bar.model_chip.try_again')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onEditConnection} className="px-4 py-2">
+            <Text className="text-[#7cd4fd] text-sm font-medium">{t('top_bar.model_chip.edit_connection')}</Text>
+          </TouchableOpacity>
+        </VisibleSheetCenter>
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex flex-col items-center justify-center gap-y-4 w-full h-full">
+      {header}
+      {models.length >= MIN_MODELS_FOR_SEARCH && (
+        <View className="flex flex-row items-center mx-6 bg-[#27282A] rounded-lg px-4">
+          <MagnifyingGlass size={20} weight="bold" color="white" />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t('top_bar.model_chip.search_provider_models', { provider: providerName })}
+            placeholderTextColor="#9F9FA0"
+            className="flex-1 h-[38px] ml-2 text-white"
+            scrollEnabled={false}
+            onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={20} color="white" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+      {!filteredModels.length && (
+        <Text className="text-white text-sm text-center pt-4 px-5">
+          {t('top_bar.model_chip.no_models_found', { query: searchQuery })}
+        </Text>
+      )}
+      {filteredModels.length > 0 && (
+        <BottomSheetFlatList
+          data={filteredModels}
+          keyExtractor={model => model.id}
+          className="w-full"
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, gap: 8 }}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item: model }) => {
+            const isSelected = model.id === currentModelId;
+            const displayName = (model as { name?: string }).name;
+            return (
+              <TouchableOpacity
+                disabled={isSaving}
+                onPress={() => selectModel(model.id)}
+                style={{
+                  backgroundColor: isSelected ? '#2e404b' : '#2A2A2E',
+                  borderWidth: isSelected ? 2 : 0,
+                  borderColor: isSelected ? '#7cd4fd' : 'transparent',
+                }}
+                className="w-full p-4 rounded-xl flex-row items-center justify-between">
+                <View className="flex-1" style={{ gap: 2 }}>
+                  <Text className="text-white text-base font-medium" numberOfLines={1}>
+                    {displayName || model.id}
+                  </Text>
+                  {!!displayName && displayName !== model.id && (
+                    <Text className="text-[#9F9FA0] text-xs" numberOfLines={1}>{model.id}</Text>
+                  )}
+                </View>
+                {isSelected && <Check size={20} color="#7cd4fd" weight="bold" style={{ marginLeft: 12 }} />}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * Centers its children in the part of the sheet that is actually on screen. With dynamic sizing off
+ * the content area is always as tall as the highest snap point, so plain `justify-center` puts a
+ * status message near the bottom edge (or off screen) while the sheet sits at its lower snap point.
+ * Tracks the sheet position so it stays centered while dragging between snap points too.
+ * `inset` is the height of anything rendered above it (eg. the provider bar).
+ */
+function VisibleSheetCenter({ children, style, inset = 0 }: { children: React.ReactNode; style?: ViewStyle; inset?: number }) {
+  const { animatedPosition, animatedLayoutState } = useBottomSheetInternal();
+  const visibleStyle = useAnimatedStyle(() => {
+    const { containerHeight, handleHeight } = animatedLayoutState.value;
+    return { height: Math.max(0, containerHeight - animatedPosition.value - handleHeight - inset) };
+  });
+  return (
+    <Animated.View style={[{ width: '100%', alignItems: 'center', justifyContent: 'center' }, style, visibleStyle]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * Amber outline triangle left of the chip while the on-device model is short on free RAM. Tapping it
+ * explains why that leads to "crashes" (the OS evicting us) and what to do about it.
+ */
+function LowMemoryIndicator({ provider, enabled }: { provider: unknown; enabled: boolean }) {
+  const { t } = useTranslation();
+  const status = useLowMemoryStatus(provider, enabled);
+  const [open, setOpen] = useState(false);
+  if (!status) return null;
+
+  return (
+    <Fragment>
+      <TouchableOpacity
+        onPress={() => setOpen(true)}
+        style={{ marginTop: -5, padding: 2 }}
+        hitSlop={10}
+        accessibilityLabel={t('models.low_memory.indicator_label')}>
+        <Warning size={18} color={LOW_MEMORY_COLOR} weight="bold" />
+      </TouchableOpacity>
+      <LowMemoryModal status={status} visible={open} onClose={() => setOpen(false)} />
+    </Fragment>
+  );
+}
+
+const CHIP_ICON_SIZE = 15;
+const CHIP_ICON_STYLE = { marginRight: 4 };
+
+/**
+ * Small brand mark shown next to the model name in the chip.
+ *  - On-device: there is no provider logo, so we match the model itself (Qwen, Gemma, Granite, ...).
+ *  - External providers: the provider's mark (Ollama, LM Studio, OpenAI, ...). When we have no mark
+ *    for the provider we try the model name instead, then the legacy png logo, then a generic tag.
+ */
+function ProviderIcon({ provider, modelName }: { provider: string; modelName?: string | null }) {
+  if (!modelName) return null; // Nothing loaded - the chip already reads "No model loaded".
+
+  const MonoIcon =
+    provider === 'native'
+      ? findIconByModelName(modelName)
+      : findIconByProvider(provider) || findIconByModelName(modelName);
+  if (MonoIcon) return <MonoIcon width={CHIP_ICON_SIZE} height={CHIP_ICON_SIZE} color="#ffffff" style={CHIP_ICON_STYLE} />;
+
+  const legacyLogo = AVAILABLE_LLM_PROVIDERS.find(p => p.value === provider)?.logo;
+  if (provider !== 'native' && legacyLogo) {
+    return <Image source={legacyLogo} style={{ width: CHIP_ICON_SIZE, height: CHIP_ICON_SIZE, ...CHIP_ICON_STYLE }} />;
+  }
+
+  return <Tag size={CHIP_ICON_SIZE} color="#ffffff" weight="bold" style={CHIP_ICON_STYLE} />;
+}

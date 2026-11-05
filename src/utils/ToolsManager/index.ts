@@ -1,0 +1,468 @@
+import uiStore from "@/store/UIStore";
+import { NativeCompletionResult } from "llama.rn";
+import { generateUUID } from "../constants";
+import { ICompleteResponse, IStreamCallback, IStreamEvent } from "../AiProviders/baseOpenAILikeProvider";
+import Tools from './tools';
+import ToolReranker from './toolReranker';
+import { safeJsonParse } from "../formatters";
+import Telemetry from "../Telemetry";
+import { throwIfAborted } from "../chat/abort";
+import { truncateMiddle } from "../chat/contextCompaction";
+import { isOnDeviceProvider, toolSupportsProvider } from "./providerGuards";
+import i18n from "@/i18n";
+import { Platform } from "react-native";
+
+export { isOnDeviceProvider, isOnDeviceProviderName, toolSupportsProvider } from "./providerGuards";
+
+/**
+ * Tools that belong together in the tools sheet. A group renders as a single row on the main
+ * page that opens a sub-page with one toggle per tool (mirrors how the desktop app groups the
+ * create-files skills).
+ */
+export type ToolGroupId = 'createFiles' | 'calendar';
+export type ToolGroup = {
+    id: ToolGroupId;
+    /** Which section of the tools sheet the group's row sits in - same as its tools' category */
+    category: ToolManagerTool['category'];
+    name: string;
+    description: string;
+    /** Longer text shown at the top of the group's sub-page */
+    note: string;
+};
+export const TOOL_GROUPS: Record<ToolGroupId, ToolGroup> = {
+    createFiles: {
+        id: 'createFiles',
+        category: 'default',
+        // Getters so the text is translated when it is shown, not at module load
+        get name() { return i18n.t('tools.groups.create_files.name'); },
+        get description() { return i18n.t('tools.groups.create_files.description'); },
+        get note() { return i18n.t('tools.groups.create_files.note'); },
+    },
+    calendar: {
+        id: 'calendar',
+        category: 'appConnections',
+        get name() { return i18n.t('tools.groups.calendar.name'); },
+        get description() { return i18n.t('tools.groups.calendar.description'); },
+        get note() { return i18n.t('tools.groups.calendar.note'); },
+    },
+};
+
+export type ToolManagerTool = {
+    /** Definition of the tool - this can be used to generate a tool call */
+    id: string;
+    /** Shown in the tools sheet - translated (define as a getter calling i18n.t) */
+    name: string;
+    /** Shown in the tools sheet - translated (define as a getter calling i18n.t). Not sent to the model - that is `definition.function.description`. */
+    description: string;
+    defaultEnabled: boolean;
+    category: 'default' | 'appConnections';
+    /** Grouped tools live on a sub-page of the tools sheet instead of the main list */
+    group?: ToolGroupId;
+    /**
+     * Asked when the user switches the tool on (chat tools sheet or a scheduled job's tool picker),
+     * eg: to get an OS permission up front instead of mid-reply. Resolve false to leave it off.
+     */
+    requestPermission?: () => Promise<boolean>;
+    /** Shown when `requestPermission` resolves false - translated (define as a getter calling i18n.t) */
+    permissionDeniedMessage?: string;
+    /**
+     * Set to false for tools the on-device provider cannot run (they are pruned from the tool
+     * list and shown disabled in the tools sheet while the on-device provider is selected).
+     * Defaults to true.
+     */
+    supportsOnDevice?: boolean;
+    /**
+     * Set to true for tools that only make sense with a person in the loop (eg: creating another
+     * scheduled job). They are left out of the per-job tool picker and never handed to a job run.
+     */
+    hiddenFromScheduledJobs?: boolean;
+    definition: {
+        type: 'function';
+        function: {
+            name: string;
+            description?: string;
+            parameters: {
+                type: 'object',
+                properties: {
+                    [key: string]: any;
+                },
+                required: readonly string[];
+            };
+        }
+    }
+    /** Configuration of the tool - this is used to store the tool's configuration for use during execution */
+    config: { [key: string]: any };
+
+    /** Execute the tool with given arguments - should return a string */
+    execute: (args: any, streamEmitter: (event: IStreamEvent, data: any) => void, context?: ToolExecutionContext) => Promise<string> | string;
+}
+
+/** Per-turn context handed to every tool execution */
+export type ToolExecutionContext = {
+    /** Session abort signal - fires when the user stops the reply. Tools waiting on the user (eg: approval) should settle on it. */
+    signal?: AbortSignal | null;
+    /**
+     * Nobody is watching this turn (scheduled job) - tools that would normally ask the user for
+     * consent before slow or costly work proceed as if approved instead of waiting for a tap.
+     */
+    autoApproveTools?: boolean;
+}
+
+type ToolCallLoopProps = {
+    currentResponse: ICompleteResponse;
+    runStreamCompletion: (messages: any[], callback: IStreamCallback, availableTools: any[]) => Promise<ICompleteResponse>;
+    streamEmitter: (event: IStreamEvent, data: any) => void;
+    currentMessageHistory: any[];
+    /**
+     * Max characters of a tool result that are fed back to the model (the UI still gets the full
+     * result). Providers with small context windows set this so one big result cannot evict the
+     * system prompt. Unset = unlimited.
+     */
+    maxToolResultChars?: number;
+    /** Whether to merge the tool call results into the previous message (this is the default behavior) */
+    mergeToolCallResults?: boolean;
+    /** Session abort signal - when it fires the loop stops before the next tool execution / LLM round */
+    signal?: AbortSignal | null;
+    /**
+     * Restrict the loop to exactly these tools instead of the user's enabled set. Used by scheduled
+     * jobs, where the user pre-selects the tools per job (see `getToolsByIds`).
+     */
+    toolset?: ToolManagerTool[];
+    /** Extra per-turn context handed to every tool execution (merged with `signal`) */
+    executionContext?: Omit<ToolExecutionContext, 'signal'>;
+    /**
+     * Max tool calls executed for this reply, counted across all rounds (see `Workspace.maxToolCallsFor`).
+     * Once reached, the model gets one last round with no tools so it answers from what it has.
+     * Unset/null = no limit.
+     */
+    maxToolCalls?: number | null;
+}
+
+/** Appended to the final tools-off round so the model answers instead of asking for more tools */
+const TOOL_LIMIT_NOTE = 'The tool call limit for this reply was reached and no more tools are available. Answer the user now using the tool results above. If they are not enough to fully answer, say what is missing.';
+
+class ToolsManager {
+    static instance: ToolsManager;
+    private _tools: ToolManagerTool[] | null = null;
+
+    configurableTools: ToolManagerTool[] = [
+        Tools.default.webSearch,
+        Tools.default.webScraping,
+        Tools.default.getLocation,
+        Tools.default.getCurrentTime,
+        Tools.default.summarize,
+        Tools.default.createScheduledJob,
+        Tools.createFiles.createTextFile,
+        Tools.createFiles.createPdfFile,
+        Tools.createFiles.createDocxFile,
+        Tools.createFiles.createPptxPresentation,
+        Tools.appConnections.draftEmail,
+        Tools.appConnections.draftText,
+        Tools.appConnections.calendarEventCreation,
+        Tools.appConnections.calendarEventReading,
+        // Hands off to the clock app, which only Android has
+        ...(Platform.OS === 'android' ? [Tools.appConnections.setReminder] : []),
+    ]
+
+    log = (text: string, ...args: any[]) => {
+        console.log(`\x1b[35m[ToolsManager] ${text}\x1b[0m`, ...args);
+    }
+
+    constructor() {
+        if (ToolsManager.instance) return ToolsManager.instance;
+        ToolsManager.instance = this;
+    }
+
+    resetTools() {
+        this._tools = null;
+    }
+
+    /**
+     * Gets all of the tools that are enabled by the user or the default tools
+     * in the raw format that the ToolsManager uses - should not be used directly for LLM function calling
+     */
+    async getTools(): Promise<ToolManagerTool[]> {
+        const userSettings = await uiStore.getFromStorage('tools', {});
+        const onDevice = await isOnDeviceProvider();
+        let enabledTools: ToolManagerTool[] = [];
+        for (const tool of this.configurableTools) {
+            // Some tools cannot run on the on-device provider regardless of the user's toggle
+            if (onDevice && !toolSupportsProvider(tool, 'native')) {
+                this.log(`ToolsManager::getTools: Skipping ${tool.id} - not supported by the on-device provider`);
+                continue;
+            }
+            // If the tool is not a key in the user settings, and it is default enabled, add it to the enabled tools
+            if (!userSettings.hasOwnProperty(tool.id) && tool.defaultEnabled) {
+                enabledTools.push(tool);
+                continue;
+            }
+
+            if (userSettings[tool.id]) enabledTools.push(tool);
+        }
+        return enabledTools;
+    }
+
+    /**
+     * The configured tools with these ids, in catalog order. Unknown ids are ignored. Used by
+     * scheduled jobs, which store the tool ids the user picked for each job.
+     */
+    getToolsByIds(ids: string[]): ToolManagerTool[] {
+        const wanted = new Set(ids);
+        return this.configurableTools.filter(tool => wanted.has(tool.id));
+    }
+
+    /** The translated name of the tool behind a function name (eg: an approval request's `skillName`) - falls back to the function name */
+    displayNameFor(functionName: string): string {
+        return this.configurableTools.find(tool => tool.definition.function.name === functionName)?.name ?? functionName;
+    }
+
+    /** Tools a scheduled job may be given - everything not flagged `hiddenFromScheduledJobs` */
+    get scheduledJobEligibleTools(): ToolManagerTool[] {
+        return this.configurableTools.filter(tool => !tool.hiddenFromScheduledJobs);
+    }
+
+    /**
+     * Gets all of the tools that are enabled by the user or the default tools
+     * in the format that any supported LLM can use for function calling
+     */
+    async injectAvailableTools(): Promise<ToolManagerTool['definition'][]> {
+        try {
+            // If the tools are not loaded, load them. Null is used to indicate that the tools are not loaded.
+            if (this._tools === null) this._tools = await this.getTools();
+            return this._tools.map(tool => tool.definition);
+        } catch (error) {
+            this.log('ToolsManager::injectAvailableTools: Error getting available tools', error);
+            return [];
+        }
+    }
+
+    private _generateToolCallSignature(toolCall: NativeCompletionResult['tool_calls'][number]) {
+        const { name, arguments: args } = toolCall.function;
+        if (!name) return '';
+        if (Object.keys(args).length > 0 && args !== "{}") {
+            const parsedArgs = safeJsonParse(args, null);
+            if (!parsedArgs) return `${name}(${JSON.stringify(args)})`;
+            const argsString = Object.entries(parsedArgs).map(([key, value]) => `${key}: ${value}`).join(', ');
+            return `${name}(${argsString})`;
+        }
+        else return `${name}()`;
+    }
+
+    /**
+     * Manages the execution of tool calls and returns the next messages to be sent to the LLM
+     */
+    async manageToolCallExecutions(
+        toolCalls: NativeCompletionResult['tool_calls'],
+        streamEmitter: (event: IStreamEvent, data: any) => void,
+        currentMessageHistory: any[],
+        maxToolResultChars?: number,
+        context: ToolExecutionContext = {},
+        toolset: ToolManagerTool[] | null = null,
+    ): Promise<any[]> {
+        const nextMessages = [...currentMessageHistory];
+        const knownTools = toolset ?? this._tools;
+
+        if (!toolCalls || toolCalls.length === 0) return nextMessages;
+        streamEmitter('will_call_tools', '');
+        for (const toolCall of toolCalls) {
+            const toolCallName = this._generateToolCallSignature(toolCall);
+            const humanReadableToolCall = {
+                uuid: generateUUID(),
+                signature: toolCallName,
+                result: '',
+            }
+            streamEmitter('report_tool_call', humanReadableToolCall);
+
+            const knownToolConfig = knownTools?.find(tool => tool.definition.function.name === toolCall.function.name);
+            if (!knownToolConfig) {
+                this.log(`ToolsManager::manageToolCallExecutions: Tool not found or available: ${toolCallName}`);
+                streamEmitter('report_tool_call_result', {
+                    uuid: humanReadableToolCall.uuid,
+                    signature: humanReadableToolCall.signature,
+                    result: 'Error: Tool not found or available',
+                });
+                continue;
+            }
+
+            this.log(`ToolsManager::manageToolCallExecutions: Executing tool call: ${toolCallName}`);
+            const toolCallResult = await knownToolConfig.execute(toolCall.function.arguments, streamEmitter, context);
+            streamEmitter('report_tool_call_result', {
+                uuid: humanReadableToolCall.uuid,
+                signature: humanReadableToolCall.signature,
+                result: toolCallResult ?? 'Error: No result from tool call',
+            });
+            const modelVisibleResult = maxToolResultChars ? truncateMiddle(String(toolCallResult ?? ''), maxToolResultChars) : toolCallResult;
+            if (modelVisibleResult !== toolCallResult) this.log(`ToolsManager::manageToolCallExecutions: Truncated ${toolCallName} result from ${String(toolCallResult).length} to ${maxToolResultChars} chars for the model`);
+            nextMessages.push({
+                role: 'tool',
+                // Pairs this result with the assistant `tool_calls` entry appended in `toolCallLoop`
+                // (absent in the merge flow, where the result is folded into the previous message).
+                ...(toolCall.id ? { tool_call_id: toolCall.id } : {}),
+                content: modelVisibleResult,
+                signature: humanReadableToolCall.signature,
+                function: toolCall.function.name,
+            });
+            Telemetry.logEvent(Telemetry.CUSTOM_EVENTS.ACTIONS.TOOL_CALLED, { tool: toolCall.function.name });
+        }
+        return nextMessages;
+    }
+
+    /**
+     * Filters tools by relevance to the user prompt using a cross-encoder reranker.
+     * Only runs when the tool count exceeds the threshold for the given provider type.
+     * Falls back to the full tool set on any failure.
+     */
+    async rerankTools(
+        tools: ToolManagerTool['definition'][],
+        prompt: string,
+        providerType: 'on-device' | 'cloud',
+        onStatus?: (message: string) => void,
+    ): Promise<ToolManagerTool['definition'][]> {
+        const threshold = providerType === 'on-device'
+            ? ToolReranker.ON_DEVICE_THRESHOLD
+            : ToolReranker.CLOUD_THRESHOLD;
+
+        if (tools.length <= threshold) {
+            this.log(`Tool count (${tools.length}) below ${providerType} threshold (${threshold}), skipping reranking`);
+            return tools;
+        }
+
+        const reranker = new ToolReranker();
+        return reranker.rerank({
+            prompt,
+            tools,
+            topN: threshold,
+            onStatus,
+        });
+    }
+
+    /**
+     * Builds the OpenAI-shaped assistant message for a round that ended in tool calls:
+     * the visible reply text (reasoning stripped) plus `tool_calls` carrying the ids the results
+     * will reference. Providers that do not send tool call ids get one generated here, and the id is
+     * written back onto the tool call so `manageToolCallExecutions` tags the result with the same id.
+     */
+    private assistantToolCallMessage(response: ICompleteResponse) {
+        const toolCalls = (response.toolCalls ?? []).map((toolCall) => {
+            if (!toolCall.id) toolCall.id = `call_${generateUUID().replace(/-/g, '').slice(0, 24)}`;
+            return {
+                id: toolCall.id,
+                type: 'function' as const,
+                // Gemini requires its thought_signature back on multi-turn tool calls.
+                ...(toolCall.extra_content ? { extra_content: toolCall.extra_content } : {}),
+                function: {
+                    name: toolCall.function.name,
+                    arguments: typeof toolCall.function.arguments === 'string'
+                        ? toolCall.function.arguments
+                        : JSON.stringify(toolCall.function.arguments ?? {}),
+                },
+            };
+        });
+        // Reasoning was folded into <think> tags for the UI - never send it back to the model.
+        const content = (response.textResponse ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+        return { role: 'assistant', content, tool_calls: toolCalls };
+    }
+
+    /**
+     * Rewrites a working history for a round with no tools offered. The assistant `tool_calls`
+     * messages and `tool` results are replaced by plain text folded into the last user message
+     * (the same shape the on-device merge flow uses), because some APIs reject tool messages in a
+     * request that defines no tools. `note` is appended after the results.
+     */
+    private toolFreeHistory(messages: any[], note: string): any[] {
+        const lastUserIndex = messages.map(m => m?.role).lastIndexOf('user');
+        if (lastUserIndex === -1) return [...messages, { role: 'user', content: note }];
+
+        const results: string[] = [];
+        const kept: any[] = [];
+        for (const [index, message] of messages.entries()) {
+            if (index > lastUserIndex && message?.role === 'tool') {
+                results.push(`Function: ${message.signature ?? message.function ?? 'tool'}\nResult: ${message.content}`);
+                continue;
+            }
+            if (index > lastUserIndex && message?.role === 'assistant' && message.tool_calls) continue;
+            kept.push(message);
+        }
+
+        const suffix = [...results, note].join('\n');
+        const userMessage = kept[lastUserIndex];
+        const content = Array.isArray(userMessage.content)
+            ? [...userMessage.content, { type: 'text', text: suffix }]
+            : `${userMessage.content ?? ''}\n${suffix}`;
+        kept[lastUserIndex] = { ...userMessage, content };
+        return kept;
+    }
+
+    /**
+     * This is the main loop that manages the tool calls.
+     * It will loop until there are no more tool calls to make.
+     * It will also manage the tool call responses and update the message history.
+     * 
+     * If the current response has no tool calls, it will return the current response as is without looping.
+     * If tool calls are present, it will loop until there are no more tool calls to make.
+     * - Each loop will append the tool call responses to the previous message since most times, if a role: function exists in the history, it will refuse to call any more tool calls, even if they are different
+     * - The loop will continue until there are no more tool calls to make - determined by the toolCalls property of the response
+     * - Each loop will remove any already called tool from the available tools to prevent infinite loops of tools (TBD on if we keep this eg: deep-research)
+     * - Only one tool call runs per round - parallel calls are dropped down to the first, which is also all the model sees it asked for, so it can call the next tool in the following round.
+     * - Once `maxToolCalls` tool calls have run, the model gets one last round with no tools, so the reply still ends in an answer.
+     * - The loop will return the final response from the LLM.
+     */
+    async toolCallLoop({
+        currentResponse,
+        runStreamCompletion,
+        streamEmitter,
+        currentMessageHistory,
+        mergeToolCallResults = true,
+        signal = null,
+        maxToolResultChars,
+        toolset,
+        executionContext = {},
+        maxToolCalls = null,
+    }: ToolCallLoopProps): Promise<ICompleteResponse> {
+        let willLoop = currentResponse.toolCalls && currentResponse.toolCalls.length > 0;
+        if (!willLoop) return currentResponse;
+
+        let availableTools = toolset ? toolset.map(tool => tool.definition) : await this.injectAvailableTools();
+        let nextResponse = currentResponse;
+        let nextMessages = [...currentMessageHistory];
+        let toolCallsUsed = 0;
+
+        do {
+            // The user stopped the chat mid-round - do not execute tools or ask the LLM again.
+            throwIfAborted(signal);
+            // No parallel tool calls - run the first one only. Trimming the response itself keeps the echoed
+            // assistant `tool_calls` message in step with the results, so no call is left without a result.
+            const [toolCall] = nextResponse.toolCalls ?? [];
+            if ((nextResponse.toolCalls?.length ?? 0) > 1) this.log(`ToolsManager::toolCallLoop: Model asked for ${nextResponse.toolCalls!.length} tool calls at once - running only ${toolCall.function.name}`);
+            nextResponse = { ...nextResponse, toolCalls: [toolCall] };
+            // Cloud providers get the round echoed back as a real assistant `tool_calls` message so the
+            // model sees that *it* already made this call before it sees the result. Without it, models
+            // that reply then call a tool see a result for a call that is not in the history and call
+            // the same tool again on every round. The on-device merge flow keeps its text-only history.
+            if (!mergeToolCallResults) nextMessages.push(this.assistantToolCallMessage(nextResponse));
+            nextMessages = await this.manageToolCallExecutions([toolCall], streamEmitter, nextMessages, maxToolResultChars, { ...executionContext, signal }, toolset ?? null);
+            toolCallsUsed += 1;
+            throwIfAborted(signal);
+            for (const [index, message] of nextMessages.entries()) {
+                if (message.role === 'tool' && mergeToolCallResults) {
+                    const previousMessage = nextMessages[index - 1];
+                    nextMessages[index - 1] = { ...previousMessage, content: `${previousMessage.content}\nFunction: ${message.signature}\nResult: ${message.content}` };
+                    availableTools = availableTools.filter(tool => tool.function.name !== message.function); // Remove the tool from the available tools
+                    nextMessages.pop(); // Remove the tool message
+                }
+            }
+
+            if (maxToolCalls && toolCallsUsed >= maxToolCalls) {
+                this.log(`ToolsManager::toolCallLoop: Tool call limit (${maxToolCalls}) reached - running a final round with no tools`);
+                streamEmitter('report_status', i18n.t('models.status.tool_call_limit_reached', { count: maxToolCalls }));
+                return runStreamCompletion(this.toolFreeHistory(nextMessages, TOOL_LIMIT_NOTE), (token: string) => streamEmitter('chunk', token), []);
+            }
+
+            nextResponse = await runStreamCompletion(nextMessages, (token: string) => streamEmitter('chunk', token), availableTools);
+            willLoop = nextResponse.toolCalls && nextResponse.toolCalls.length > 0;
+        } while (willLoop);
+        return nextResponse;
+    }
+}
+
+export default new ToolsManager();

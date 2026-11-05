@@ -1,0 +1,85 @@
+diff --git a/node_modules/@react-native-voice/voice/android/build.gradle b/node_modules/@react-native-voice/voice/android/build.gradle
+index 8fce879..3147125 100644
+--- a/node_modules/@react-native-voice/voice/android/build.gradle
++++ b/node_modules/@react-native-voice/voice/android/build.gradle
+@@ -62,6 +62,8 @@ def supportVersion = rootProject.hasProperty('supportLibVersion') ? rootProject.
+ dependencies {
+     implementation fileTree(dir: 'libs', include: ['*.jar'])
+     testImplementation 'junit:junit:4.12'
+-    implementation "com.android.support:appcompat-v7:${supportVersion}"
++    // The source only imports androidx.annotation; the legacy support library
++    // pulled in support-compat and broke manifest merging against androidx.core.
++    implementation "androidx.annotation:annotation:1.7.1"
+     implementation 'com.facebook.react:react-native:+'
+ }
+diff --git a/node_modules/@react-native-voice/voice/android/src/main/java/com/wenkesj/voice/VoiceModule.java b/node_modules/@react-native-voice/voice/android/src/main/java/com/wenkesj/voice/VoiceModule.java
+index f22833e..8a3e596 100644
+--- a/node_modules/@react-native-voice/voice/android/src/main/java/com/wenkesj/voice/VoiceModule.java
++++ b/node_modules/@react-native-voice/voice/android/src/main/java/com/wenkesj/voice/VoiceModule.java
+@@ -119,6 +119,14 @@ public class VoiceModule extends ReactContextBaseJavaModule implements Recogniti
+           intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, extras.intValue());
+           break;
+         }
++        case "EXTRA_MASK_OFFENSIVE_WORDS": {
++          // RecognizerIntent.EXTRA_MASK_OFFENSIVE_WORDS (API 33+). Defaults to
++          // true, which replaces profanity with asterisks. Older releases
++          // ignore the extra. Use the literal so this compiles against older
++          // compileSdk versions too.
++          intent.putExtra("android.speech.extra.MASK_OFFENSIVE_WORDS", opts.getBoolean(key));
++          break;
++        }
+       }
+     }
+ 
+@@ -146,7 +154,10 @@ public class VoiceModule extends ReactContextBaseJavaModule implements Recogniti
+ 
+   @Override
+   public String getName() {
+-    return "RCTVoice";
++    // JS looks up NativeModules.Voice. The old bridge stripped the "RCT"
++    // prefix natively, but the New Architecture interop layer keys legacy
++    // modules by the exact getName() value, so "RCTVoice" resolves to null.
++    return "Voice";
+   }
+ 
+   @ReactMethod
+@@ -321,9 +332,16 @@ public class VoiceModule extends ReactContextBaseJavaModule implements Recogniti
+   public void onPartialResults(Bundle results) {
+     WritableArray arr = Arguments.createArray();
+ 
+-    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+-    for (String result : matches) {
+-      arr.pushString(result);
++    // The recognizer can deliver a bundle with no RESULTS_RECOGNITION list
++    // (observed on Android 13+ once EXTRA_MASK_OFFENSIVE_WORDS is false).
++    // Treat that as an empty result rather than crashing the main thread.
++    ArrayList<String> matches = results == null
++        ? null
++        : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
++    if (matches != null) {
++      for (String result : matches) {
++        arr.pushString(result);
++      }
+     }
+ 
+     WritableMap event = Arguments.createMap();
+@@ -344,9 +362,16 @@ public class VoiceModule extends ReactContextBaseJavaModule implements Recogniti
+   public void onResults(Bundle results) {
+     WritableArray arr = Arguments.createArray();
+ 
+-    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+-    for (String result : matches) {
+-      arr.pushString(result);
++    // The recognizer can deliver a bundle with no RESULTS_RECOGNITION list
++    // (observed on Android 13+ once EXTRA_MASK_OFFENSIVE_WORDS is false).
++    // Treat that as an empty result rather than crashing the main thread.
++    ArrayList<String> matches = results == null
++        ? null
++        : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
++    if (matches != null) {
++      for (String result : matches) {
++        arr.pushString(result);
++      }
+     }
+ 
+     WritableMap event = Arguments.createMap();

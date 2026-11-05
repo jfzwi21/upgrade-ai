@@ -1,0 +1,438 @@
+import { Linking, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import SafeView from '@/components/SafeView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ArrowLeft,
+  CaretRight,
+  File,
+  DiscordLogo,
+  FileText,
+  FileLock,
+  ChartBar,
+  GithubLogo,
+  Scroll,
+  ShieldCheck,
+  Sparkle,
+  TextAa,
+  Translate,
+} from 'phosphor-react-native';
+import { useTranslation } from 'react-i18next';
+import i18n, { LANGUAGES, currentLanguage, tKey } from '@/i18n';
+import { isQuickContextAvailable } from '@/quickContext';
+import { isAssistantAvailable } from '@/assistant';
+import { IWorkspacePageKey } from '../index';
+import uiStore from '@/store/UIStore';
+import { PATHS } from '@/utils/paths';
+import useHighjackBackButtonPress from '@/hooks/useHighjackBackButtonPress';
+import AwaitableAlert from '@/components/AwaitableAlert';
+import { useRef, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import useLLMPreference from '@/hooks/useLLMPreference';
+import { startCase } from 'lodash';
+import Workspace from '@/database/models/Workspace';
+import WorkspaceThread from '@/database/models/WorkspaceThread';
+import Document from '@/database/models/Document';
+import Memory from '@/database/models/Memory';
+import ScheduledJob from '@/database/models/ScheduledJob';
+import { syncNativeSchedule } from '@/utils/ScheduledJobs/scheduler';
+import WorkspaceChat from '@/database/models/WorkspaceChat';
+import uninstallAllModels from '@/utils/models/manager';
+import { deleteAllAppFiles } from '@/utils/fs/cleanup';
+import { showToast } from '@/utils/Notification';
+import MonoProviderIcon from '@/components/MonoProviderIcon';
+import ApkVersion from './ApkVersion';
+import DeviceInfo from 'react-native-device-info';
+import { getChangelogForVersion } from '@/utils/changelog';
+import ChangelogModal from '@/components/ChangelogModal';
+
+interface MainViewProps {
+  goToPage: (page: IWorkspacePageKey) => void;
+}
+
+type SupportLink = {
+  /** Translation key - resolved with t() when rendered */
+  title: string;
+  link?: string;
+  icon: React.ReactNode;
+  onPress?: (() => void) | null;
+  borderBottom?: boolean;
+}
+
+function parsedModelName(modelName: string) {
+  if (!modelName) return null;
+  return modelName
+    .split('/')
+    .pop()
+    ?.replaceAll(new RegExp('(-?)(gguf|GGUF|Gguf)$', 'g'), '') // Remove -gguf suffix
+    ?.replaceAll(new RegExp('-', 'g'), ' ') // Replace - with space
+    ?.replace(/^./, str => startCase(str)); // Capitalize first letter
+}
+
+const ABOUT_LINKS: SupportLink[] = [
+  {
+    title: tKey('settings.about.star_github'),
+    link: "https://github.com/Mintplex-Labs/Anything-LLM",
+    icon: <GithubLogo size={18} color="#FFF" />,
+  },
+  {
+    title: tKey('settings.about.join_discord'),
+    link: 'https://discord.gg/6UyHPeGZAC',
+    icon: <DiscordLogo size={18} color="#FFF" />,
+  },
+]
+
+const UTILITY_LINKS: SupportLink[] = [
+  {
+    title: tKey('settings.utility.clear_temp_files'),
+    icon: <File size={18} color="#FFF" />,
+    onPress: async () => {
+      // Processed upload text, every file the assistant generated (download cards go to their "missing" state),
+      // and any picker/upload scratch files
+      await deleteAllAppFiles();
+      showToast(i18n.t('settings.utility.temp_files_cleared'));
+    },
+  },
+]
+
+const LEGAL_LINKS: SupportLink[] = [
+  {
+    title: tKey('settings.legal.terms'),
+    link: 'https://docs.anythingllm.com/mobile/terms',
+    icon: <FileText size={18} color="#FFF" />,
+  },
+  {
+    title: tKey('settings.legal.privacy'),
+    link: 'https://docs.anythingllm.com/mobile/privacy',
+    icon: <FileLock size={18} color="#FFF" />,
+  },
+]
+
+const changelogEntry = getChangelogForVersion(DeviceInfo.getVersion());
+
+export function MainView({ goToPage }: MainViewProps) {
+  const { t } = useTranslation();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const activeLanguage = LANGUAGES.find(lang => lang.code === currentLanguage());
+  const { llmPreferences, providerToName } = useLLMPreference();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [changelogVisible, setChangelogVisible] = useState(false);
+  function goBack() {
+    navigation.reset({
+      index: 0,
+      // @ts-ignore
+      routes: [{ name: PATHS.home }],
+    });
+    return true;
+  }
+  async function resetAnythingLLM() {
+    const confirm = await AwaitableAlert(
+      t('settings.reset.title'),
+      t('settings.reset.confirm_message'),
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.reset.confirm_button'), style: 'destructive' },
+    );
+    if (!confirm) return;
+    await Promise.all([
+      Workspace.deleteAll(),
+      WorkspaceChat.deleteAll(),
+      WorkspaceThread.deleteAll(),
+      Document.deleteAll(true),
+      Memory.deleteAll(),
+      ScheduledJob.deleteAll(),
+      uninstallAllModels(),
+      deleteAllAppFiles(),
+    ]);
+    await syncNativeSchedule();
+    await uiStore.resetAllStorage();
+    uiStore.emitter.emit(uiStore.globalEvents.ONBOARDING_RESET);
+    // Defer navigation reset to the next frame so the component tree
+    // re-renders with onboarding screens registered in the navigator.
+    setTimeout(() => {
+      navigation.reset({
+        index: 0,
+        // @ts-ignore
+        routes: [{ name: PATHS.onboarding.welcome }],
+      });
+    }, 0);
+    return true;
+  }
+  useHighjackBackButtonPress(goBack);
+
+  return (
+    <SafeView
+      scrollable={false}
+      safeAreaClassNames="pt-[21px]"
+      containerClassNames="flex-1 flex flex-col"
+      safeAreaStyle={{ backgroundColor: '#0E0F0F' }}>
+      {/* Header */}
+      <View
+        style={{
+          paddingHorizontal: 30,
+          paddingTop: insets.top,
+          paddingBottom: 20,
+        }}
+        className="w-full flex flex-row items-center justify-center relative">
+        <TouchableOpacity
+          onPress={goBack}
+          className="absolute left-0 flex flex-row items-center gap-2">
+          <ArrowLeft size={24} color="#FFF" weight="bold" />
+        </TouchableOpacity>
+        <Text
+          style={{ maxWidth: '80%' }}
+          numberOfLines={1}
+          ellipsizeMode="middle"
+          className="text-white text-lg font-medium">
+          {t('common.settings')}
+        </Text>
+      </View>
+
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        contentContainerClassName="flex flex-col justify-between"
+        contentContainerStyle={{
+          paddingHorizontal: 8,
+          paddingBottom: insets.bottom + 20,
+          gap: 24,
+          flexGrow: 1,
+        }}>
+        <View className="w-full flex flex-col" style={{ gap: 24 }}>
+          {/* Selected Provider and Model */}
+          <View className="w-full flex flex-col" style={{ gap: 12 }}>
+            <Text style={{ color: '#9F9FA0' }} className="text-sm uppercase">
+              {t('settings.llm_preference.title')}
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#27282A', padding: 14, gap: 20 }}
+              className="w-full flex flex-row items-center rounded-lg"
+              onPress={() => goToPage('advanced_model_preferences')}>
+              <View className="flex flex-row gap-2 items-center">
+                <MonoProviderIcon
+                  provider={llmPreferences.provider}
+                  size={22}
+                  color="#FFF"
+                />
+                <Text className="text-white text-lg">
+                  {providerToName(llmPreferences.provider)}
+                </Text>
+              </View>
+              <View className="flex flex-1 flex-row gap-2 items-center justify-between">
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={{ color: '#9F9FA0' }}
+                  className="text-lg flex-1 text-right">
+                  {parsedModelName(llmPreferences.config.model)}
+                </Text>
+                <CaretRight size={18} color="#FFF" />
+              </View>
+            </TouchableOpacity>
+            <Text style={{ color: '#9F9FA0' }} className="text-sm">
+              {t('settings.llm_preference.description')}
+            </Text>
+          </View>
+
+          {/* System-level integrations (Android only for now) - each can be switched off on its own page */}
+          {(isQuickContextAvailable() || isAssistantAvailable()) && (
+            <View className="w-full flex flex-col" style={{ gap: 12 }}>
+              <Text style={{ color: '#9F9FA0' }} className="text-sm uppercase">
+                {t('settings.special_tools.title')}
+              </Text>
+              <View
+                className="flex flex-col"
+                style={{
+                  backgroundColor: '#1B1B1E',
+                  padding: 14,
+                  gap: 12,
+                  borderRadius: 8,
+                }}>
+                {isAssistantAvailable() && (
+                  <SupportItem
+                    title={t('settings.special_tools.assistant')}
+                    icon={<Sparkle size={18} color="#FFF" />}
+                    onPress={() => goToPage('assistant')}
+                    borderBottom={isQuickContextAvailable()}
+
+                  />
+                )}
+                {isQuickContextAvailable() && (
+                  <SupportItem
+                    title={t('settings.special_tools.ask_with_anythingllm')}
+                    icon={<TextAa size={18} color="#FFF" />}
+                    onPress={() => goToPage('special_tools')}
+                    borderBottom={false}
+                  />
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* About AnythingLLM */}
+          <View className="w-full flex flex-col" style={{ gap: 12 }}>
+            <ApkVersion />
+            <View
+              className="flex flex-col"
+              style={{
+                backgroundColor: '#1B1B1E',
+                padding: 14,
+                gap: 12,
+                borderRadius: 8,
+              }}>
+              {changelogEntry && (
+                <SupportItem
+                  title={t('settings.about.release_notes', { version: changelogEntry.version })}
+                  icon={<Scroll size={18} color="#FFF" />}
+                  onPress={() => setChangelogVisible(true)}
+                  borderBottom={ABOUT_LINKS.length > 0}
+                />
+              )}
+              {ABOUT_LINKS.map((link, index) => {
+                return (
+                  <SupportItem
+                    key={index}
+                    title={t(link.title)}
+                    link={link.link}
+                    icon={link.icon}
+                    onPress={link.onPress}
+                    borderBottom={index !== ABOUT_LINKS.length - 1}
+                  />
+                );
+              })}
+            </View>
+          </View>
+
+          <View className="w-full flex flex-col" style={{ gap: 12 }}>
+            <View className="flex flex-row items-end justify-between">
+              <Text style={{ color: '#9F9FA0' }} className="text-sm uppercase">
+                {t('settings.utility.title')}
+              </Text>
+            </View>
+            <View
+              className="flex flex-col"
+              style={{
+                backgroundColor: '#1B1B1E',
+                padding: 14,
+                gap: 12,
+                borderRadius: 8,
+              }}>
+              {/* UI language - detected from the device on first launch */}
+              <SupportItem
+                title={t('settings.language.app_language')}
+                icon={<Translate size={18} color="#FFF" />}
+                value={activeLanguage?.nativeName}
+                onPress={() => goToPage('language')}
+              />
+              <SupportItem
+                title={t('settings.utility.tool_auto_approvals')}
+                icon={<ShieldCheck size={18} color="#FFF" />}
+                onPress={() => goToPage('tool_auto_approvals')}
+              />
+              <SupportItem
+                title={t('settings.utility.anonymous_telemetry')}
+                icon={<ChartBar size={18} color="#FFF" />}
+                onPress={() => goToPage('anonymous_telemetry')}
+                borderBottom={UTILITY_LINKS.length > 0}
+              />
+              {UTILITY_LINKS.map((link, index) => {
+                return (
+                  <SupportItem
+                    key={index}
+                    title={t(link.title)}
+                    link={link.link}
+                    icon={link.icon}
+                    onPress={link.onPress}
+                    borderBottom={index !== UTILITY_LINKS.length - 1}
+                  />
+                );
+              })}
+            </View>
+          </View>
+
+          <View className="w-full flex flex-col" style={{ gap: 12 }}>
+            <View className="flex flex-row items-end justify-between">
+              <Text style={{ color: '#9F9FA0' }} className="text-sm uppercase">
+                {t('settings.legal.title')}
+              </Text>
+            </View>
+            <View
+              className="flex flex-col"
+              style={{
+                backgroundColor: '#1B1B1E',
+                padding: 14,
+                gap: 12,
+                borderRadius: 8,
+              }}>
+              {LEGAL_LINKS.map((link, index) => {
+                return (
+                  <SupportItem
+                    key={index}
+                    title={t(link.title)}
+                    link={link.link}
+                    icon={link.icon}
+                    onPress={link.onPress}
+                    borderBottom={index !== LEGAL_LINKS.length - 1}
+                  />
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        <View className="w-full flex flex-col" style={{ gap: 12 }}>
+          <TouchableOpacity
+            onPress={resetAnythingLLM}
+            style={{ backgroundColor: 'rgba(122,39,26,0.2)' }}
+            className="flex flex-row items-center justify-center rounded-lg p-4 mb-4">
+            <Text style={{ color: '#F97066' }} className="text-lg font-medium">
+              {t('settings.reset.title')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+      {changelogEntry && (
+        <ChangelogModal
+          visible={changelogVisible}
+          content={changelogEntry.content}
+          onClose={() => setChangelogVisible(false)}
+        />
+      )}
+    </SafeView>
+  );
+}
+
+function SupportItem({
+  title,
+  link,
+  icon,
+  borderBottom = true,
+  onPress = null,
+  value,
+}: {
+  title: string;
+  link?: string;
+  icon: React.ReactNode;
+  borderBottom?: boolean;
+  onPress?: (() => void) | null;
+  /** Current setting shown right-aligned, e.g. the active language */
+  value?: string;
+}) {
+  return (
+    <TouchableOpacity
+      className="flex flex-row items-center gap-2"
+      style={{
+        borderBottomWidth: borderBottom ? 1 : 0,
+        borderBottomColor: '#27282A',
+        paddingBottom: borderBottom ? 12 : 0,
+      }}
+      onPress={onPress ? onPress : () => Linking.openURL(link ?? '')}>
+      {icon}
+      <Text className="text-white text-lg flex-1">{title}</Text>
+      {value && (
+        <Text numberOfLines={1} style={{ color: '#9F9FA0' }} className="text-lg">
+          {value}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+}

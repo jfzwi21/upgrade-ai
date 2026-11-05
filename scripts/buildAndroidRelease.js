@@ -1,0 +1,169 @@
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+// Load the root .env (the same file Gradle reads via react-native-config) so the
+// signing password is available even when it is not exported in the shell.
+function loadDotEnv(envPath = '.env') {
+    if (!fs.existsSync(envPath)) return;
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+        if (line.trim().startsWith('#')) continue;
+        const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+        if (!match) continue;
+        const key = match[1];
+        const value = match[2].replace(/^(["'])(.*)\1$/, '$2');
+        if (!process.env[key]) process.env[key] = value;
+    }
+}
+loadDotEnv();
+
+// Read package.json to get version
+const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const version = packageJson.version;
+
+console.log(`Building Android release with version: ${version}`);
+
+// Cross-platform helper functions
+const isWindows = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
+
+function runCommand(command, options = {}) {
+    const defaultOptions = { stdio: 'inherit', shell: true };
+    execSync(command, { ...defaultOptions, ...options });
+}
+
+function extractArchive(zipPath, outputDir) {
+    if (isWindows) {
+        // Use PowerShell on Windows
+        const extractCommand = `powershell -command "Expand-Archive -Path '${zipPath}' -DestinationPath '${outputDir}' -Force"`;
+        runCommand(extractCommand);
+    } else {
+        // Use unzip on Mac/Linux
+        const extractCommand = `unzip -o "${zipPath}" -d "${outputDir}"`;
+        runCommand(extractCommand);
+    }
+}
+
+function getJavaCommand() {
+    if (isWindows) {
+        // Try common Java paths on Windows
+        const javaPaths = [
+            'java',
+            'C:\\Program Files\\Java\\jdk-17\\bin\\java.exe',
+            'C:\\Program Files\\Java\\jdk-11\\bin\\java.exe',
+            'C:\\Program Files\\Java\\jdk-8\\bin\\java.exe'
+        ];
+
+        for (const javaPath of javaPaths) {
+            try {
+                runCommand(`"${javaPath}" -version`, { stdio: 'pipe' });
+                return javaPath;
+            } catch (error) {
+                // Continue to next path
+            }
+        }
+        throw new Error('Java not found. Please install Java and ensure it\'s in your PATH.');
+    } else {
+        // On Mac/Linux, just use 'java' from PATH
+        return 'java';
+    }
+}
+
+try {
+    // Clean up release folder
+    if (fs.existsSync('release')) fs.rmSync('release', { recursive: true });
+
+    // Clean the build
+    console.log('Cleaning the build...');
+    runCommand(isWindows ? 'cd android && gradlew clean && cd ..' : 'cd android && ./gradlew clean && cd ..');
+
+    console.log('Building the AAB bundle...');
+    runCommand(isWindows ? 'cd android && gradlew bundleRelease && cd ..' : 'cd android && ./gradlew bundleRelease && cd ..');
+
+    // Keep the JS sourcemap for this exact build - it is the only way to decode the
+    // `index.android.bundle:1:<col>` frames in Crashlytics JS crash reports. Stored outside
+    // release/ and android/build/ since both are wiped at the start of every build.
+    const versionCode = fs.readFileSync('android/app/build.gradle', 'utf8').match(/versionCode\s+(\d+)/)[1];
+    const sourcemapFolder = `sourcemaps/android/v${version}-${versionCode}`;
+    fs.mkdirSync(sourcemapFolder, { recursive: true });
+    fs.copyFileSync(
+        'android/app/build/generated/sourcemaps/react/release/index.android.bundle.map',
+        path.join(sourcemapFolder, 'index.android.bundle.map')
+    );
+    console.log(`🗺️  Sourcemap saved to: ${sourcemapFolder}`);
+
+    // Create universal APK with version in filename
+    console.log('Creating universal APK with version...');
+    const aabPath = 'android/app/build/outputs/bundle/release/app-release.aab';
+    const apksOutputPath = `android/app/build/outputs/apks/app-release-v${version}-universal.apks`;
+
+    console.log('Validating keystore files exist...');
+    const keystorePath = 'android/app/anythingllm-upload-key.keystore';
+    const keystorePassword = process.env.APP_RELEASE_STORE_PASSWORD;
+    const keystoreAlias = 'anythingllm-keystore';
+    if (!keystorePassword) {
+        console.error('APP_RELEASE_STORE_PASSWORD environment variable is not set.');
+        process.exit(1);
+    }
+    if (!fs.existsSync(keystorePath)) {
+        console.error('Keystore file not found. Please ensure the keystore file exists at android/app/anythingllm-upload-key.keystore');
+        process.exit(1);
+    }
+
+    // Get Java command
+    const javaCommand = getJavaCommand();
+
+    const bundletoolCommand = [
+        `"${javaCommand}" -jar scripts/bundletool-1.18.1.jar build-apks`,
+        `--bundle="${aabPath}"`,
+        `--output="${apksOutputPath}"`,
+        '--mode=universal',
+        `--ks="${keystorePath}"`,
+        `--ks-key-alias="${keystoreAlias}"`,
+        `--ks-pass="pass:${keystorePassword}"`
+    ].join(' ');
+
+    runCommand(bundletoolCommand);
+
+    // Extract the universal APK with versioned name
+    const outputDir = `android/app/build/outputs/apks/universal-v${version}`;
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+    // Copy and extract
+    const zipPath = `android/app/build/outputs/apks/app-release-v${version}-universal.zip`;
+    fs.copyFileSync(apksOutputPath, zipPath);
+
+    // Extract the APK using cross-platform method
+    console.log('Extracting universal APK...');
+    extractArchive(zipPath, outputDir);
+
+    // Rename the APK to app-release-v${version}-universal.apk
+    const apkPath = path.join(outputDir, `universal.apk`);
+    fs.renameSync(apkPath, path.join(outputDir, `anythingllm-universal.apk`));
+
+    // Clean up zip file
+    fs.unlinkSync(zipPath);
+    fs.unlinkSync(apksOutputPath);
+
+    // Generate release
+    // - AAB in root for Google Play
+    // - APK + version.txt in cdn/** for the CDN
+    // Create release folder
+    const releaseFolder = `release/v${version}`;
+    if (!fs.existsSync(releaseFolder)) fs.mkdirSync(releaseFolder, { recursive: true });
+    fs.copyFileSync(aabPath, path.join(releaseFolder, `anythingllm-v${version}.aab`));
+
+    // Copy APK to cdn/**
+    const cdnFolder = path.join(releaseFolder, `cdn`);
+    if (!fs.existsSync(cdnFolder)) fs.mkdirSync(cdnFolder, { recursive: true });
+    fs.copyFileSync(path.join(outputDir, `anythingllm-universal.apk`), path.join(cdnFolder, `anythingllm-universal.apk`));
+    fs.writeFileSync(path.join(cdnFolder, `version.txt`), version);
+
+    console.log(`✅ Android release build completed successfully!`);
+    console.log(`📱 Universal APK extracted to: ${releaseFolder}`);
+    console.log(`📦 AAB bundle: ${path.join(releaseFolder, `anythingllm-v${version}.aab`)}`);
+    console.log(`🎯 Final APK: ${path.join(cdnFolder, `anythingllm-universal.apk`)}`);
+} catch (error) {
+    console.error('❌ Build failed:', error);
+    process.exit(1);
+} 

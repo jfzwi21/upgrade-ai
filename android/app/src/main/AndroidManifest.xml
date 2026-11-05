@@ -1,0 +1,216 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Allow app to check if any other app can handle URLs -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https"/>
+        </intent>
+        <!-- Messaging apps a drafted text can be opened in (MessagingModule) -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto"/>
+        </intent>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.viber.voip" />
+        <package android:name="jp.naver.line.android" />
+        <package android:name="com.discord" />
+        <!-- Mail apps a drafted email can be opened in (MessagingModule) -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto"/>
+        </intent>
+        <!-- Calendar apps a drafted event can be added in (MessagingModule) -->
+        <intent>
+            <action android:name="android.intent.action.INSERT" />
+            <data android:mimeType="vnd.android.cursor.dir/event"/>
+        </intent>
+        <!-- Opening an event the read-calendar tool cited -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="vnd.android.cursor.item/event"/>
+        </intent>
+        <!-- Clock apps an approved alarm or timer is handed to (AlarmModule) -->
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_ALARMS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SHOW_TIMERS" />
+        </intent>
+        <!-- Speech recognizers the assistant's recognition service forwards to (AssistantRecognitionService) -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <!-- Allow app to get advertising ID for Firebase Analytics -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Local notifications (chat reply finished while the phone is locked, model download progress) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Handing approved alarms and timers to the clock app (AlarmModule). Normal permission, granted at install -
+         not the Play-restricted exact-alarm access, the clock app does the scheduling. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!-- Needed only for devices running Android 9 (API 28) or lower -->
+    <!-- Currently it is used only for storing chat sessions (/Download)-->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
+
+    <application
+      android:largeHeap="true"
+      android:allowBackup="true"
+      android:dataExtractionRules="@xml/data_extraction_rules"
+      android:fullBackupContent="@xml/backup_rules"
+      android:networkSecurityConfig="@xml/network_security_config"
+
+      android:icon="@mipmap/ic_launcher"
+      android:label="@string/app_name"
+      android:name=".MainApplication"
+      android:roundIcon="@mipmap/ic_launcher"
+      android:supportsRtl="true"
+      android:theme="@style/AppTheme">
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:screenOrientation="portrait"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+
+        <!--
+          anythingllm:// deep links (eg. Hugging Face "Use this model" -> anythingllm://pull-hf?repo=...&file=...).
+          Same scheme as AnythingLLM Desktop. Handled in JS by src/utils/DeepLinks.
+        -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="anythingllm" />
+        </intent-filter>
+
+        <!--
+          Share sheet destination: images and the document types our parser understands
+          (see utils/DocumentParser/registry.ts - keep these in sync). Handled by SharedContentModule.
+        -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <action android:name="android.intent.action.SEND_MULTIPLE" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="image/*" />
+            <data android:mimeType="text/*" />
+            <data android:mimeType="application/pdf" />
+            <data android:mimeType="application/json" />
+            <data android:mimeType="application/xml" />
+            <data android:mimeType="application/yaml" />
+            <data android:mimeType="application/x-yaml" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            <data android:mimeType="application/vnd.ms-excel.sheet.macroenabled.12" />
+            <data android:mimeType="application/vnd.ms-excel" />
+            <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+        </intent-filter>
+      </activity>
+
+      <!--
+        Quick Actions: "Ask with AnythingLLM" in the text-selection toolbar of other apps - edit or
+        summarize the selected text; a result is copied for the user to paste over the selection.
+        A translucent card over the calling app, in its own task so the main app is not brought forward.
+        See quickcontext/QuickContextActivity.kt and src/quickContext.
+      -->
+      <activity
+        android:name=".quickcontext.QuickContextActivity"
+        android:label="@string/quick_actions_action"
+        android:theme="@style/QuickContextTheme"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:screenOrientation="portrait"
+        android:windowSoftInputMode="adjustNothing"
+        android:excludeFromRecents="true"
+        android:taskAffinity=""
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/plain" />
+        </intent-filter>
+      </activity>
+
+      <!--
+        Digital assistant: AnythingLLM as the device's default assistant app (the slot Gemini holds), opened
+        with the assist gesture over any app. The system binds the service while the user has picked us in
+        Settings > Default apps > Digital assistant app; the session launches the overlay activity and hands
+        it the screenshot of the app underneath. Every assistant must also provide a speech recognizer, which
+        becomes the device default - ours forwards to the recognizer that was there before.
+        See the assistant/ package and src/assistant.
+      -->
+      <service
+        android:name=".assistant.AssistantService"
+        android:label="@string/app_name"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true">
+        <meta-data android:name="android.voice_interaction" android:resource="@xml/assistant_interaction_service" />
+        <intent-filter>
+            <action android:name="android.service.voice.VoiceInteractionService" />
+        </intent-filter>
+      </service>
+      <service
+        android:name=".assistant.AssistantSessionService"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true" />
+      <service
+        android:name=".assistant.AssistantRecognitionService"
+        android:label="@string/app_name"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.speech.RecognitionService" />
+            <category android:name="android.intent.category.DEFAULT" />
+        </intent-filter>
+        <meta-data android:name="android.speech" android:resource="@xml/assistant_recognition_service" />
+      </service>
+      <!--
+        No screenOrientation: the overlay follows the app underneath. A translucent activity must not lock
+        its orientation - Android 8.0 throws when one does (apps targeting 27+).
+      -->
+      <activity
+        android:name=".assistant.AssistantActivity"
+        android:label="@string/app_name"
+        android:theme="@style/AssistantTheme"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:windowSoftInputMode="adjustNothing"
+        android:excludeFromRecents="true"
+        android:taskAffinity="com.anythingllm.assistant"
+        android:exported="false" />
+
+      <uses-native-library android:name="libadsprpc.so" android:required="false" />
+      <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+    </application>
+</manifest>

@@ -1,0 +1,228 @@
+import { View, Text, KeyboardAvoidingView, Platform, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { screenDimensions } from '@/utils/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import useKeyboardHeight from '@/hooks/useKeyboardHeight';
+import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
+import { X, MagnifyingGlass, CaretDown } from 'phosphor-react-native';
+import getLLM from '@/utils/AiProviders';
+import LMStudioProvider, { LMStudioModel } from '@/utils/AiProviders/LMStudioProvider';
+import debounce from 'lodash/debounce';
+import { useTranslation } from 'react-i18next';
+
+export default function LMStudioOptions({
+  provider,
+  baseUrl,
+  model,
+  onBaseUrlChange,
+  onModelChange,
+}: {
+  provider: 'lmstudio';
+  baseUrl: string;
+  model: string;
+  onBaseUrlChange?: (provider: string, settings: { baseUrl?: string }) => Promise<void>;
+  onModelChange?: (provider: string, settings: { model?: string; baseUrl?: string }) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
+  const [currentBaseUrl, setCurrentBaseUrl] = useState(baseUrl || '');
+  const [currentModelId, setCurrentModelId] = useState(model || '');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [availableModels, setAvailableModels] = useState<LMStudioModel[]>([]);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
+  // Refs so the debounced fetch (created once) always sees the latest selection and handler.
+  const currentModelIdRef = useRef(currentModelId);
+  const onModelChangeRef = useRef(onModelChange);
+  currentModelIdRef.current = currentModelId;
+  onModelChangeRef.current = onModelChange;
+
+  const handlePropertyChange = async (key: string, value: string) => {
+    switch (key) {
+      case 'baseUrl':
+        setCurrentBaseUrl(value);
+        await onBaseUrlChange?.(provider, { baseUrl: value });
+        break;
+      case 'model':
+        setCurrentModelId(value);
+        await onModelChange?.(provider, { model: value });
+        break;
+    }
+  };
+
+  const filteredModels = useMemo(() => {
+    return availableModels.filter(model => model.id.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [searchQuery, availableModels]);
+
+  const handleModelSelect = (modelId: string) => {
+    handlePropertyChange('model', modelId);
+    bottomSheetRef.current?.dismiss();
+  };
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.7}
+      />
+    ),
+    [],
+  );
+
+  const debouncedFetchModels = useRef(
+    debounce(async (url: string) => {
+      if (url) {
+        try {
+          const models = await (getLLM('lmstudio', { baseUrl: url }) as LMStudioProvider).availableModels();
+          setAvailableModels(models.map((model: LMStudioModel) => model));
+          // Keep the user's existing selection; only default to the first model when nothing is selected yet.
+          // The default must be persisted too, otherwise the picker shows a model that was never saved.
+          const firstModelId = models[0]?.id;
+          if (!currentModelIdRef.current && firstModelId) {
+            setCurrentModelId(firstModelId);
+            await onModelChangeRef.current?.(provider, { model: firstModelId, baseUrl: url });
+          }
+        } catch (error) {
+          console.log(`Error fetching models: (${url})`, error);
+          setAvailableModels([]);
+        }
+      } else {
+        setAvailableModels([]);
+      }
+    }, 500)
+  ).current;
+
+  const debouncedSaveBaseUrl = useRef(
+    debounce(async (url: string) => {
+      await onBaseUrlChange?.(provider, { baseUrl: url });
+    }, 500)
+  ).current;
+
+  useEffect(() => {
+    debouncedFetchModels(currentBaseUrl);
+  }, [currentBaseUrl, debouncedFetchModels]);
+
+  useEffect(() => {
+    return () => {
+      debouncedFetchModels.cancel();
+      debouncedSaveBaseUrl.cancel();
+    };
+  }, [debouncedFetchModels, debouncedSaveBaseUrl]);
+
+  return (
+    <View className="flex flex-col">
+      <KeyboardAvoidingView style={{ gap: 8 }} behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1 flex flex-col">
+
+        <View className="w-full flex flex-col" style={{ gap: 12 }}>
+          <View className="flex flex-row items-center justify-between">
+            <Text style={{ color: '#9F9FA0' }} className="text-lg uppercase">{t('settings.provider_options.base_url')}</Text>
+          </View>
+          <TextInput
+            key="baseUrl"
+            keyboardType="url"
+            multiline={false}
+            numberOfLines={1}
+            style={{
+              maxHeight: screenDimensions.height - keyboardHeight - insets.top - insets.bottom - 200,
+              backgroundColor: '#000',
+              textAlignVertical: 'center',
+              padding: 16
+            }}
+            className="rounded-lg text-white placeholder:text-white/50 text-left lowercase"
+            value={currentBaseUrl}
+            onChangeText={(value) => {
+              const cleanedValue = value.toLowerCase().trim();
+              setCurrentBaseUrl(cleanedValue);
+              debouncedSaveBaseUrl(cleanedValue);
+            }}
+            placeholder={t('settings.provider_options.base_url_placeholder', { example: 'http://192.168.86.238:1234' })}
+          />
+        </View>
+
+        <View className="w-full flex flex-col" style={{ gap: 12 }}>
+          <View className="flex flex-row items-center justify-between">
+            <Text style={{ color: '#9F9FA0' }} className="text-lg uppercase">{t('settings.provider_options.model_selection')}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => bottomSheetRef.current?.present()}
+            style={{
+              backgroundColor: '#000',
+              padding: 16,
+              borderRadius: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: currentModelId ? 'white' : '#9F9FA0', fontSize: 16 }}>
+                {currentModelId ? currentModelId : t('settings.provider_options.select_model')}
+              </Text>
+            </View>
+            <CaretDown size={20} color="#9F9FA0" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        index={0}
+        snapPoints={['60%', '95%']}
+        enableDynamicSizing={false}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: '#1B1B1E' }}
+        handleIndicatorStyle={{
+          backgroundColor: '#9F9FA0',
+          width: 45,
+          margin: 10,
+        }}>
+        <BottomSheetView className="flex-1 bg-[#1B1B1E]">
+          <Text className="text-white text-lg font-semibold py-4 text-center">
+            {t('settings.provider_options.choose_model')}
+          </Text>
+          <View className="flex flex-row items-center mx-4 bg-[#27282A] rounded-lg px-4 mb-4">
+            <MagnifyingGlass size={20} weight="bold" color="white" />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder={t('settings.provider_options.search_models')}
+              placeholderTextColor="#9F9FA0"
+              className="flex-1 h-[38px] ml-2 text-white"
+              scrollEnabled={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <X size={20} color="white" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView className="flex-1 px-4">
+            {filteredModels.map((model) => (
+              <TouchableOpacity
+                key={model.id}
+                onPress={() => handleModelSelect(model.id)}
+                style={{
+                  backgroundColor: currentModelId === model.id ? '#2e404b' : 'transparent',
+                  padding: 16,
+                  borderRadius: 8,
+                  marginBottom: 8,
+                  borderWidth: 1,
+                  borderColor: currentModelId === model.id ? '#7cd4fd' : '#27282A'
+                }}>
+                <Text style={{
+                  color: currentModelId === model.id ? 'white' : '#FFFFFF',
+                  fontSize: 16,
+                  fontWeight: '600'
+                }}>
+                  {model.id}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </BottomSheetView>
+      </BottomSheetModal>
+    </View>
+  );
+}

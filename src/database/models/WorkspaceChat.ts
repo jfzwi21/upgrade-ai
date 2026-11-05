@@ -1,0 +1,512 @@
+import { field, json, text } from '@nozbe/watermelondb/decorators';
+import { database } from '@/database';
+import { deleteGeneratedDocumentsByStorageFilenames } from '@/utils/fs/generatedDocuments';
+import { Q, Model } from '@nozbe/watermelondb';
+import { generateUUID } from '@/utils/constants';
+import { DynamicChatMessage } from '@/screens/WorkspaceChat/ChatHistory';
+import { ICompleteResponse } from '@/utils/AiProviders/baseOpenAILikeProvider';
+
+export type IDocumentCitation = {
+  type: 'document';
+  document: {
+    uuid: string;
+    name: string;
+    chunk: string
+    score?: number;
+  }
+}
+
+export type IAgentWebSearchCitation = {
+  type: 'web-search';
+  reference: {
+    title?: string;
+    url: string;
+    content: string;
+  };
+}
+
+/**
+ * An event the read-calendar tool read from the user's calendar. Shown in the sources sheet,
+ * where tapping it opens that event (or on iOS, that day) in the calendar app.
+ */
+export type IAgentCalendarEventCitation = {
+  type: 'calendar-event';
+  event: {
+    /** Calendar provider event id - on Android also opens the event in the calendar app */
+    id: string;
+    title: string;
+    /** Epoch millis of this occurrence - recurring events share an id */
+    beginTime: number;
+    endTime: number;
+    allDay: boolean;
+    location: string;
+    description: string;
+    calendarTitle: string | null;
+    /** Hex color of the calendar the event is in */
+    calendarColor: string | null;
+  };
+}
+
+export type IAgentToolCall = {
+  uuid: string;
+  signature: string;
+  result: string;
+}
+
+/**
+ * One entry in the ordered activity timeline of an assistant turn. Everything the
+ * model did before (or between) visible answers - reasoning, tool calls and the
+ * statuses tools report while they run - is recorded here in arrival order so the
+ * UI can roll it up into a single expandable chain (mirrors the desktop
+ * StatusResponse/ChainOfThought grouping).
+ *
+ * `startedAt`/`endedAt` are wall-clock ms stamped by the chat handler so the chain
+ * can show per-step and total durations even when re-loaded from history.
+ */
+export type IActivityNodeBase = {
+  uuid: string;
+  startedAt?: number;
+  endedAt?: number;
+}
+export type IThoughtActivity = IActivityNodeBase & {
+  type: 'thought';
+  /** Reasoning text with the wrapping think tags already stripped */
+  content: string;
+}
+export type IStatusActivity = IActivityNodeBase & {
+  type: 'status';
+  /** Short human readable status eg: "Searching the web for cats" */
+  content: string;
+}
+export type IToolCallActivity = IActivityNodeBase & {
+  type: 'toolCall';
+  signature: string;
+  /** Raw result string returned by the tool - empty while the tool is still running */
+  result: string;
+}
+/** Payload of a `request_tool_approval` stream event - what a tool wants the user to sign off on */
+export type IToolApprovalRequest = {
+  requestId: string;
+  /** Tool / skill asking for consent, shown in the card header */
+  skillName: string;
+  /** Plain language explanation of what approving will do */
+  description?: string | null;
+  /** Optional arguments shown in the expandable details section */
+  payload?: Record<string, any>;
+  /** How long the request stays open before it is treated as rejected */
+  timeoutMs: number;
+}
+/** Payload of a `report_tool_approval_result` stream event */
+export type IToolApprovalResult = {
+  requestId: string;
+  approved: boolean;
+  /** Why it settled the way it did - user answer, timeout or abort */
+  message: string;
+}
+export type IToolApprovalActivity = IActivityNodeBase & IToolApprovalRequest & {
+  type: 'toolApproval';
+  /** null while the user has not answered yet */
+  approved: boolean | null;
+  /** Settlement reason once `approved` is no longer null */
+  message?: string;
+}
+export type IActivityNode = IThoughtActivity | IStatusActivity | IToolCallActivity | IToolApprovalActivity;
+
+/** @deprecated rows written by the old draft-email tool - rendered as an email draft card via `normalizeEmailDraft` */
+export type IEmailAction = {
+  type: 'email';
+  action: {
+    title: string;
+    link: string;
+  }
+}
+
+/** @deprecated rows written by the old draft-text tool - rendered as a text draft card via `normalizeTextDraft` */
+export type ITextAction = {
+  type: 'sms';
+  action: {
+    title: string;
+    link: string;
+  }
+}
+
+/**
+ * A text message the assistant drafted (see the draft-text tool). Rendered as a card in the
+ * chat history that opens the user's messaging app with the draft filled in - we never send it.
+ */
+export type ITextDraftAction = {
+  type: 'text_draft';
+  action: {
+    /** Who the message is for, as the user named them eg: "Mom" - null when only a number is known */
+    recipientName: string | null;
+    /** Phone number when known - without one the messaging app asks who to send to */
+    phoneNumber: string | null;
+    body: string;
+  }
+}
+
+/**
+ * A calendar event the assistant drafted (see the calendar-event-creation tool). Rendered as a
+ * card in the chat history that opens the calendar app's new-event screen with it filled in -
+ * nothing is added until the user saves it there.
+ */
+export type ICalendarEventAction = {
+  type: 'calendar_event_creation';
+  action: {
+    /** Epoch millis */
+    beginTime: number;
+    /** Epoch millis */
+    endTime: number;
+    title: string;
+    eventLocation: string;
+    description: string;
+    allDay: boolean;
+    /** Invitee email addresses. Absent on rows written before invitees were supported. */
+    attendees?: string[];
+    /** Null for a one-off event. Absent on older rows. */
+    recurrence?: ICalendarRecurrence | null;
+    /** Reminders, in minutes before the start. Empty = the calendar app's default. Absent on older rows. */
+    reminderMinutes?: number[];
+    /** Meeting link (Zoom, Meet, Teams, ...). Absent on older rows. */
+    url?: string | null;
+  }
+}
+
+/** How a drafted event repeats - maps onto an iCalendar RRULE */
+export type ICalendarRecurrence = {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  /** Every N periods - 2 with weekly is every other week */
+  interval: number;
+  /** Weekly only: iCalendar day codes eg: ['MO', 'WE']. Empty = the start date's weekday. */
+  byDay: string[];
+  /** Total occurrences. Null when it repeats until a date or forever. */
+  count: number | null;
+  /** Epoch millis of the last day it can occur on. Null when it repeats a number of times or forever. */
+  until: number | null;
+}
+
+/**
+ * A file the assistant generated for the user (see the create-files tools). Rendered as a
+ * persistent download card in the chat history. The file itself lives in the app's
+ * `generated-documents` folder under `storageFilename`; the card checks it still exists
+ * because "Clear temporary files" in settings removes the folder.
+ */
+export type IFileDownloadAction = {
+  type: 'file_download';
+  action: {
+    /** User-facing filename eg: "quarterly-report.docx" */
+    title: string;
+    /** Name of the file on disk inside the generated-documents folder eg: "docx-<uuid>.docx" */
+    storageFilename: string;
+    fileSize: number;
+    mimeType: string;
+  }
+}
+
+/**
+ * A scheduled job the assistant created for the user (see the create-scheduled-job tool).
+ * Rendered as a card in the chat history that opens the job's run history.
+ */
+export type IScheduledJobCreatedAction = {
+  type: 'scheduled_job_created';
+  action: {
+    jobUuid: string;
+    jobName: string;
+    /** Cron expression, local time */
+    schedule: string;
+  }
+}
+
+/**
+ * A reminder the user approved in chat (see the set-reminder tool). Within a day it was handed to
+ * the clock app as an alarm or timer; further out it was added to their calendar as an event with
+ * an alert. Rendered as a card in the chat history - we cannot tell if it was later changed or
+ * deleted in the clock or calendar app.
+ */
+export type IReminderAction = {
+  type: 'reminder_set';
+  action: {
+    kind: 'alarm' | 'timer' | 'calendar';
+    label: string;
+    /** Epoch millis it fires at */
+    fireAt: number;
+    /** Timers only: the countdown length */
+    durationSeconds: number | null;
+    /** Calendar only: the event id, to open it */
+    eventId: string | null;
+  }
+}
+
+export type IAgentCitation = IAgentWebSearchCitation | IAgentCalendarEventCitation;
+export type IChatCitation = IDocumentCitation | IAgentCitation;
+/**
+ * An email the assistant drafted (see the draft-email tool). Rendered as a card in the chat
+ * history that opens the user's mail app with the draft filled in - we never send it.
+ */
+export type IEmailDraftAction = {
+  type: 'email_draft';
+  action: {
+    /** Who the email is for, as the user named them eg: "Sarah" - null when only addresses are known */
+    recipientName: string | null;
+    /** Recipient addresses - empty when unknown, the mail app then asks who to send to */
+    to: string[];
+    cc: string[];
+    subject: string;
+    body: string;
+  }
+}
+
+export type IAgentAction = IEmailAction | IEmailDraftAction | ITextAction | ITextDraftAction |ICalendarEventAction | IFileDownloadAction | IScheduledJobCreatedAction | IReminderAction;
+export type WorkspaceChatResponseType = {
+  textResponse: string;
+  thoughts: string[];
+  toolCalls: IAgentToolCall[];
+  metrics: ICompleteResponse['metrics'];
+  attachments: any[]; // This would be IMAGES, not files - which are embedded on upload
+  citations: IChatCitation[];
+  /** @deprecated transient scratch space used by the old handler - kept so old rows still type check */
+  currentThoughtChain?: string[];
+  actions: IAgentAction[];
+  /**
+   * Ordered timeline of thoughts, statuses and tool calls for this turn.
+   * Optional because rows written before this field existed only carry
+   * `thoughts` + `toolCalls` - see `deriveActivity` in the ActivityChain UI.
+   */
+  activity?: IActivityNode[];
+  isLoading?: boolean;
+  /**
+   * The turn failed and `textResponse` holds the error message, not a reply. Persisted so a
+   * reloaded thread still renders it as an error. Rows written before this field existed
+   * have no flag and render as normal replies.
+   */
+  error?: boolean;
+}
+
+export type WorkspaceChatType = {
+  uuid: string;
+  workspaceThreadSlug: string;
+  prompt: string;
+  response: WorkspaceChatResponseType;
+  createdAt: number;
+};
+
+export default class WorkspaceChat extends Model {
+  static table = 'workspace_chats';
+
+  @text('uuid') uuid!: string;
+  @text('workspace_thread_slug') workspaceThreadSlug!: string;
+  @text('prompt') prompt!: string;
+  @json('response', (json) => json) response!: WorkspaceChatResponseType;
+  @field('created_at') createdAt!: number;
+
+  static log(message: any, ...args: any[]) {
+    console.log(`\x1b[32m[db:WorkspaceChat]\x1b[0m`, message, ...args)
+  }
+
+  static toWorkspaceChatObject(data: any): Partial<WorkspaceChatType> {
+    const { uuid, workspaceThreadSlug, prompt, response, createdAt } = data;
+    return {
+      uuid,
+      workspaceThreadSlug,
+      prompt,
+      response,
+      createdAt,
+    };
+  }
+
+  /**
+   * Find chats by a given set of where clauses
+   * @param where - An array of where clauses
+   * @returns An array of chats with the WorkspaceChatType interface
+   */
+  static async find(where: { field: string, value: string }[] = [], orderBy: { field: string, direction: 'asc' | 'desc' }[] = []): Promise<WorkspaceChatType[]> {
+    const chats = await database.get(WorkspaceChat.table).query(
+      ...where.map(({ field, value }) => Q.where(field, value)),
+      ...orderBy.map(({ field, direction }) => Q.sortBy(field, direction))
+    ).fetch();
+    return chats.map((chat) => this.toWorkspaceChatObject(chat) as WorkspaceChatType);
+  }
+
+  /**
+   * The most recently created chat across every thread, or null when none exist.
+   * Used to work out where the user was last talking.
+   */
+  static async latest(): Promise<WorkspaceChatType | null> {
+    const chats = await database.get(WorkspaceChat.table).query(
+      Q.sortBy('created_at', Q.desc),
+      Q.take(1),
+    ).fetch();
+    if (chats.length === 0) return null;
+    return this.toWorkspaceChatObject(chats[0]) as WorkspaceChatType;
+  }
+
+  /**
+   * Returns watermelon db model instance
+   */
+  static async get(where: { field: string, value: string }[] = []): Promise<Model | null> {
+    const chat = await database.get(WorkspaceChat.table).query(
+      where.map(({ field, value }) => Q.where(field, value))
+    ).fetch();
+    if (chat.length === 0) return null;
+    return chat[0];
+  }
+
+  static async create(data: Partial<WorkspaceChatType>): Promise<WorkspaceChatType> {
+    const { uuid, workspaceThreadSlug, prompt, response } = data;
+
+    let newWorkspaceChat: any;
+    await database.write(async () => {
+      newWorkspaceChat = await database.get(WorkspaceChat.table).create((workspaceChat: any) => {
+        workspaceChat.uuid = uuid ?? generateUUID();
+        workspaceChat.workspaceThreadSlug = workspaceThreadSlug;
+        workspaceChat.prompt = prompt;
+        workspaceChat.response = response;
+        workspaceChat.createdAt = Date.now();
+      });
+    });
+
+    this.log('newWorkspaceChat', { workspaceThreadSlug, uuid });
+    newWorkspaceChat = this.toWorkspaceChatObject(newWorkspaceChat);
+    return newWorkspaceChat;
+  }
+
+  /**
+   * Storage filenames of every generated file (`file_download` action) referenced by these chats.
+   * Handles rows whose `response` is still a JSON string.
+   */
+  static storageFilenamesFrom(chats: Array<Partial<WorkspaceChatType> | { response?: any }>): string[] {
+    const names: string[] = [];
+    for (const chat of chats) {
+      let response: any = chat?.response;
+      if (typeof response === 'string') {
+        try { response = JSON.parse(response); } catch { response = null; }
+      }
+      const actions: IAgentAction[] = Array.isArray(response?.actions) ? response.actions : [];
+      for (const action of actions) {
+        if (action?.type !== 'file_download') continue;
+        const storageFilename = (action as IFileDownloadAction).action?.storageFilename;
+        if (storageFilename) names.push(storageFilename);
+      }
+    }
+    return names;
+  }
+
+  /**
+   * Delete a workspace chat by a given set of where clauses.
+   * Rows are destroyed permanently (no sync engine keeps tombstones useful) and every
+   * generated file the chats produced is removed from disk with them.
+   * @param where - An array of where clauses
+   * @returns True if the chats were deleted, false otherwise
+   */
+  static async delete(where: { field: string, value: string }[] = []): Promise<boolean> {
+    try {
+      const storageFilenames = await database.write(async () => {
+        const chats = await database.get(WorkspaceChat.table).query(
+          where.map(({ field, value }) => Q.where(field, value))
+        ).fetch() as (Model & WorkspaceChatType)[];
+        if (chats.length === 0) return null;
+
+        // @ts-ignore - _raw holds the serialized column
+        const filenames = this.storageFilenamesFrom(chats.map((chat) => ({ response: chat._raw?.response ?? chat.response })));
+        this.log(`preparing to delete ${chats.length} workspace chats`);
+        await database.batch(chats.map((chat) => chat.prepareDestroyPermanently()));
+        this.log(`deleted ${chats.length} workspace chats`);
+        return filenames;
+      });
+      if (storageFilenames === null) return false;
+      await deleteGeneratedDocumentsByStorageFilenames(storageFilenames);
+      return true;
+    } catch (error) {
+      this.log('error deleting workspace chats', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create a new chat with a given prompt for placeholder purposes
+   * @param data - The data for the new chat
+   */
+  static newChatItem(data: { workspaceThreadSlug: string, prompt: string, attachments?: any[] }): Partial<DynamicChatMessage> & { workspaceThreadSlug: string } {
+    if (!data.workspaceThreadSlug) throw new Error('Workspace thread slug is required');
+    if (!data.prompt) throw new Error('Prompt is required');
+    return {
+      uuid: generateUUID(),
+      workspaceThreadSlug: data.workspaceThreadSlug,
+      prompt: data.prompt,
+      response: {
+        textResponse: '',
+        thoughts: [],
+        toolCalls: [],
+        actions: [],
+        metrics: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          outputTps: 0,
+          duration: 0,
+        },
+        attachments: data.attachments ?? [],
+        citations: [],
+        activity: [],
+      },
+      createdAt: Date.now(),
+      isLoading: true,
+    };
+  }
+
+  static async deleteAll() {
+    const chats = await database.get(WorkspaceChat.table).query().fetch() as (Model & WorkspaceChatType)[];
+    if (!chats || chats.length === 0) return true;
+    // @ts-ignore - _raw holds the serialized column
+    const storageFilenames = this.storageFilenamesFrom(chats.map((chat) => ({ response: chat._raw?.response ?? chat.response })));
+    await database.write(async () => {
+      this.log(`deleting ${chats.length} chats`);
+      await database.batch(chats.map((chat) => chat.prepareDestroyPermanently()));
+    });
+    await deleteGeneratedDocumentsByStorageFilenames(storageFilenames);
+    return true;
+  }
+
+  /**
+   * Copy every chat of one thread into another thread, preserving order and timestamps.
+   * Copies get fresh uuids so the two threads never share a row identity.
+   * @returns the number of chats copied
+   */
+  static async fork({ fromThreadSlug, toThreadSlug }: { fromThreadSlug: string, toThreadSlug: string }): Promise<number> {
+    if (!fromThreadSlug || !toThreadSlug) throw new Error('Both source and destination thread slugs are required');
+    const chats = await this.find(
+      [{ field: 'workspace_thread_slug', value: fromThreadSlug }],
+      [{ field: 'created_at', direction: 'asc' }]
+    );
+    if (chats.length === 0) return 0;
+
+    await database.write(async () => {
+      const collection = database.get(WorkspaceChat.table);
+      await database.batch(chats.map((chat) => collection.prepareCreate((record: any) => {
+        record.uuid = generateUUID();
+        record.workspaceThreadSlug = toThreadSlug;
+        record.prompt = chat.prompt;
+        record.response = chat.response;
+        record.createdAt = chat.createdAt;
+      })));
+    });
+    this.log(`forked ${chats.length} chats`, { fromThreadSlug, toThreadSlug });
+    return chats.length;
+  }
+
+  static async directCreate(data: Partial<WorkspaceChatType>): Promise<WorkspaceChatType> {
+    let newWorkspaceChat: any;
+    await database.write(async () => {
+      newWorkspaceChat = await database.get(WorkspaceChat.table).create((workspaceChat: any) => {
+        Object.assign(workspaceChat, data);
+        if (!workspaceChat.uuid) workspaceChat.uuid = generateUUID();
+        if (!workspaceChat.workspaceThreadSlug) workspaceChat.workspaceThreadSlug = data.workspaceThreadSlug;
+        if (!workspaceChat.prompt) workspaceChat.prompt = data.prompt;
+        if (!workspaceChat.response) workspaceChat.response = data.response;
+        workspaceChat.createdAt = Date.now();
+      });
+    });
+    newWorkspaceChat = this.toWorkspaceChatObject(newWorkspaceChat);
+    return newWorkspaceChat;
+  }
+}

@@ -1,0 +1,130 @@
+import { useEffect, useRef, useState } from "react";
+import { Paperclip, DotsThreeCircleVertical, X } from "phosphor-react-native";
+import { BottomSheetModal } from '@gorhom/bottom-sheet';
+import { useBottomSheet, BOTTOM_SHEET_NAMES } from '@/contexts/BottomSheetContext';
+import { View, Text, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WorkspaceType } from "@/database/models/Workspace";
+import { WorkspaceThreadType } from "@/database/models/WorkspaceThread";
+import useWorkspaceFiles from "./useWorkspaceFiles";
+import FilesListContainer from "./Container";
+import Document from "@/database/models/Document";
+import { showToast } from "@/utils/Notification";
+import { useTranslation } from "react-i18next";
+
+/**
+ * Every document in the workspace: embedded ones (searched from any thread) and full-context ones
+ * (sent whole, but only in the thread they were attached in). `thread` lets the list say which
+ * full-context documents apply to the open conversation. Both kinds can be deleted from here.
+ */
+export default function WorkspaceFilesActionSheet({ workspace, thread }: { workspace: WorkspaceType, thread?: WorkspaceThreadType | null }) {
+    const { t } = useTranslation();
+    const insets = useSafeAreaInsets();
+    const bottomSheetRef = useRef<BottomSheetModal>(null);
+    const { registerSheet, presentSheet, activeSheet, isSheetActive } = useBottomSheet();
+    const [optionsActive, setOptionsActive] = useState(false);
+    const [selectedFileUuids, setSelectedFileUuids] = useState<string[]>([]);
+    const { files, isLoading, error, fetchFiles } = useWorkspaceFiles(workspace.slug, { runOnMount: false });
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    function handleSelectAllFiles() {
+        setSelectedFileUuids(selectedFileUuids.length === files.length ? [] : files.map((file) => file.uuid));
+    }
+
+    async function deleteSelectedFiles() {
+        try {
+            setIsDeleting(true);
+            await Document.deleteByUuids(selectedFileUuids, true);
+            showToast(t('chat.files.deleted', { count: selectedFileUuids.length }), 'short');
+            setSelectedFileUuids([]);
+            await fetchFiles();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setOptionsActive(false);
+            setIsDeleting(false);
+        }
+    }
+
+    useEffect(() => {
+        registerSheet(BOTTOM_SHEET_NAMES.WORKSPACE_FILES, bottomSheetRef);
+    }, [registerSheet]);
+
+    useEffect(() => {
+        // Reset state when sheet is opened
+        if (activeSheet === BOTTOM_SHEET_NAMES.WORKSPACE_FILES) {
+            setSelectedFileUuids([]);
+            setOptionsActive(false);
+            fetchFiles();
+        }
+    }, [activeSheet]);
+
+    return (
+        <BottomSheetModal
+            ref={bottomSheetRef}
+            index={0}
+            snapPoints={['100%']}
+            enableDynamicSizing={false}
+            enablePanDownToClose={true}
+            backgroundStyle={{ backgroundColor: '#1B1B1E' }}
+            handleIndicatorStyle={{ display: 'none' }}
+            onDismiss={() => isSheetActive(BOTTOM_SHEET_NAMES.WORKSPACE_FILES) && presentSheet(BOTTOM_SHEET_NAMES.PRIMARY_PROMPT_INPUT, true)}
+        >
+            <View style={{ paddingHorizontal: 30, paddingBottom: insets.bottom, paddingTop: insets.top, flex: 1 }}>
+                <View style={{ marginBottom: 24 }} className='flex w-full flex-row items-center justify-between'>
+                    <View className='flex-1'>
+                        {optionsActive ? (
+                            <TouchableOpacity onPress={handleSelectAllFiles}>
+                                <Text style={{ color: '#7cd4fd' }} className='text-lg'>{selectedFileUuids.length === files.length ? t('chat.files.deselect_all') : t('chat.files.select_all')}</Text>
+                            </TouchableOpacity>
+                        ) : null}
+                    </View>
+                    <Text className='text-white text-xl font-medium'>{t('chat.files.title')}</Text>
+                    <View className='flex-1 items-end'>
+                        <TouchableOpacity disabled={isDeleting} onPress={() => setOptionsActive(!optionsActive)} className="disabled:opacity-50">
+                            {optionsActive ? <X size={24} color="#FFF" /> : <DotsThreeCircleVertical size={24} color="#FFF" />}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                {selectedFileUuids.length > 0 && (
+                    <TouchableOpacity
+                        disabled={isDeleting}
+                        onPress={deleteSelectedFiles}
+                        style={{ backgroundColor: 'rgba(122,39,26,0.2)', }} className='flex flex-row items-center justify-center rounded-lg p-4 mb-4'>
+                        <Text style={{ color: '#F97066' }} className='text-lg font-medium'>{t('chat.files.delete_selected')}</Text>
+                    </TouchableOpacity>
+                )}
+                <FilesListContainer
+                    disabled={isDeleting}
+                    selectedFileUuids={selectedFileUuids}
+                    setSelectedFileUuids={setSelectedFileUuids}
+                    files={files}
+                    currentThreadSlug={thread?.slug ?? null}
+                    error={error}
+                    isLoading={isLoading}
+                    optionsActive={optionsActive}
+                />
+            </View>
+        </BottomSheetModal>
+    );
+}
+
+
+export function WorkspaceFilesActionButton({ disabled = false }: { disabled: boolean }) {
+    const { t } = useTranslation();
+    const { presentSheet } = useBottomSheet();
+    return (
+        <TouchableOpacity
+            disabled={disabled}
+            onPress={() => presentSheet(BOTTOM_SHEET_NAMES.WORKSPACE_FILES)}
+            style={{ gap: 11, opacity: disabled ? 0.4 : 1 }}
+            className='flex flex-col items-center justify-center'
+        >
+            <View style={{ backgroundColor: '#3f3f42', width: 52, height: 52 }} className='flex flex-col items-center justify-center rounded-full'>
+                <Paperclip size={32} color="#FFF" />
+            </View>
+            <Text className='text-white text-lg font-medium'>{t('chat.files.title')}</Text>
+        </TouchableOpacity>
+
+    );
+}

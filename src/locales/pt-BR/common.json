@@ -718,6 +718,16 @@
       "status_expired": "Tempo de lembrete expirou antes da aprovação",
       "status_set": "Definir lembrete {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "Redigir E-mail",
       "description": "Use o assistente para redigir um e-mail para você.",

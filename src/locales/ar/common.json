@@ -802,6 +802,16 @@
       "status_expired": "انقضى موعد التذكير قبل الموافقة عليه",
       "status_set": "ضبط التذكير \"{{label}}\""
     },
+    "termux_command": {
+      "name": "أمر Termux",
+      "description": "نفّذ أمرًا في Termux بعد مراجعة الأمر والموافقة عليه في كل مرة. قد يتمكن الأمر من قراءة الملفات التي يستطيع Termux الوصول إليها أو تعديلها أو حذفها.",
+      "status_asking": "بانتظار موافقتك على أمر Termux",
+      "approval_description": "راجع الأمر الظاهر في التفاصيل. لن يُرسل إلى Termux إلا بعد موافقتك، وقد يقرأ أو يغيّر أو يحذف أي ملف يستطيع Termux الوصول إليه.",
+      "status_not_approved": "لم تتم الموافقة على أمر Termux",
+      "status_running": "جارٍ تنفيذ الأمر في Termux",
+      "status_complete": "اكتمل أمر Termux برمز خروج {{code}}",
+      "run_failed": "تعذّر تشغيل أمر Termux: {{error}}"
+    },
     "draft_email": {
       "name": "مسودة بريد إلكتروني",
       "description": "أنشئ مسودة بريد إلكتروني وافتحها في تطبيق البريد (مثل Gmail وOutlook وغيرها) لإرسالها.",

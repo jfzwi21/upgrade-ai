@@ -108,6 +108,7 @@ function ToolApprovalCard({ node }: { node: IToolApprovalActivity }) {
                 </View>
             )}
 
+            {node.allowAlwaysApproval !== false && (
             <Pressable
                 onPress={() => setAlwaysApprove((v) => !v)}
                 disabled={responded}
@@ -132,6 +133,7 @@ function ToolApprovalCard({ node }: { node: IToolApprovalActivity }) {
                 </View>
                 <Text style={{ color: COLORS.text }} className="text-sm">{t('chat.tool_approval.always_approve')}</Text>
             </Pressable>
+            )}
 
             <View className="flex flex-row" style={{ gap: 8, marginBottom: 4 }}>
                 <TouchableOpacity

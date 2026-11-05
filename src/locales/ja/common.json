@@ -662,6 +662,16 @@
       "status_expired": "リマインダーの期限が過ぎたが、まだ承認されていません",
       "status_set": "リマインダーを設定: {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "メールをドラフト",
       "description": "アシスタントを使用してメールをドラフトしてもらいます。",

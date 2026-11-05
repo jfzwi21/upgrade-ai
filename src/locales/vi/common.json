@@ -662,6 +662,16 @@
       "status_expired": "Thời gian nhắc nhở đã hết, nhưng vẫn chưa được phê duyệt",
       "status_set": "Đặt lời nhắc {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "Soạn thảo email",
       "description": "Sử dụng trợ lý để soạn thảo email cho bạn.",

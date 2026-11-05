@@ -718,6 +718,16 @@
       "status_expired": "El tiempo de recordatorio ha expirado antes de la aprobación.",
       "status_set": "Establecer recordatorio {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "Borrador de correo",
       "description": "Use el asistente para redactar un correo para usted.",

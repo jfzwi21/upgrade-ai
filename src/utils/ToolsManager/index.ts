@@ -160,6 +160,8 @@ class ToolsManager {
         Tools.appConnections.draftText,
         Tools.appConnections.calendarEventCreation,
         Tools.appConnections.calendarEventReading,
+        // Shell execution is only available through the Android Termux integration.
+        ...(Platform.OS === 'android' ? [Tools.default.termuxCommand] : []),
         // Hands off to the clock app, which only Android has
         ...(Platform.OS === 'android' ? [Tools.appConnections.setReminder] : []),
     ]

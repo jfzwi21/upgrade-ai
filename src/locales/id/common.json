@@ -662,6 +662,16 @@
       "status_expired": "Waktu pengingat telah habis sebelum disetujui.",
       "status_set": "Atur pengingat {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "Konsep Email",
       "description": "Gunakan asisten untuk membuat konsep email untuk Anda.",

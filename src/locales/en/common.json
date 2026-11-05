@@ -690,6 +690,16 @@
       "status_expired": "Reminder time passed before it was approved",
       "status_set": "Set reminder \"{{label}}\""
     },
+    "termux_command": {
+      "name": "Termux Command",
+      "description": "Run a command in Termux only after reviewing and approving it each time. The command may read, change, or delete files Termux can access.",
+      "status_asking": "Waiting for your approval to run a Termux command",
+      "approval_description": "Review the command shown in the details. It will not be sent to Termux until you approve, and it may read, change, or delete any file Termux can access.",
+      "status_not_approved": "Termux command was not approved",
+      "status_running": "Running command in Termux",
+      "status_complete": "Termux command finished with exit code {{code}}",
+      "run_failed": "Could not run the Termux command: {{error}}"
+    },
     "draft_email": {
       "name": "Draft Email",
       "description": "Draft an email and open it in your mail app (Gmail, Outlook and more) to send.",

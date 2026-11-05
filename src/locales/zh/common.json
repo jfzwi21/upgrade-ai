@@ -662,6 +662,16 @@
       "status_expired": "提醒时间已过，尚未批准",
       "status_set": "设置提醒 \"{{label}}\""
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "起草电子邮件",
       "description": "使用助手为您起草电子邮件。",

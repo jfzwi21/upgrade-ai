@@ -662,6 +662,16 @@
       "status_expired": "알림 시간 만료 전에 승인",
       "status_set": "알림 설정: {{label}}"
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "이메일 초안",
       "description": "어시스턴트를 사용하여 이메일 초안을 작성합니다.",

@@ -40,10 +40,12 @@ export const TOOL_APPROVAL_MESSAGES = {
     rejected: 'Tool call was rejected by the user.',
     timedOut: 'Tool approval request timed out. User did not respond in time.',
     aborted: 'Session was aborted while awaiting tool approval.',
+    humanRequired: 'This tool requires a live user approval and cannot run unattended.',
 } as const;
 
 type PendingApproval = {
     skillName: string;
+    allowAlwaysApproval: boolean;
     settle: (result: ToolApprovalResult) => void;
 }
 
@@ -71,6 +73,7 @@ class ToolApprovalManager {
      * @param signal - session abort signal; aborting settles the request as denied
      * @param timeoutMs - defaults to TOOL_APPROVAL_TIMEOUT_MS
      * @param autoApprove - resolve approved right away without asking (unattended scheduled jobs - see `ToolExecutionContext.autoApproveTools`)
+     * @param requireHumanApproval - always show a fresh card and disallow saved auto-approval
      */
     async request({
         skillName,
@@ -80,6 +83,7 @@ class ToolApprovalManager {
         signal = null,
         timeoutMs = TOOL_APPROVAL_TIMEOUT_MS,
         autoApprove = false,
+        requireHumanApproval = false,
     }: {
         skillName: string;
         description?: string | null;
@@ -88,15 +92,19 @@ class ToolApprovalManager {
         signal?: AbortSignal | null;
         timeoutMs?: number;
         autoApprove?: boolean;
+        requireHumanApproval?: boolean;
     }): Promise<ToolApprovalResult> {
         const requestId = generateUUID();
         if (signal?.aborted) return { approved: false, message: TOOL_APPROVAL_MESSAGES.aborted };
+        if (autoApprove && requireHumanApproval) {
+            return { approved: false, message: TOOL_APPROVAL_MESSAGES.humanRequired };
+        }
         if (autoApprove) {
             this.log(`Auto-approving ${skillName} (unattended run)`);
             streamEmitter('report_status', i18n.t('tools.approval.auto_approved_status', { tool: skillName }));
             return { approved: true, message: TOOL_APPROVAL_MESSAGES.autoApproved };
         }
-        if (await isAutoApproved(skillName).catch(() => false)) {
+        if (!requireHumanApproval && await isAutoApproved(skillName).catch(() => false)) {
             this.log(`Auto-approving ${skillName} (user chose to always approve)`);
             streamEmitter('report_status', i18n.t('tools.approval.auto_approved_status', { tool: skillName }));
             return { approved: true, message: TOOL_APPROVAL_MESSAGES.alwaysApproved };
@@ -120,10 +128,10 @@ class ToolApprovalManager {
                 settle({ approved: false, message: TOOL_APPROVAL_MESSAGES.aborted });
             }
 
-            this.pending.set(requestId, { skillName, settle });
+            this.pending.set(requestId, { skillName, allowAlwaysApproval: !requireHumanApproval, settle });
             signal?.addEventListener('abort', onAbort, { once: true });
 
-            const request: IToolApprovalRequest = { requestId, skillName, description, payload, timeoutMs };
+            const request: IToolApprovalRequest = { requestId, skillName, description, payload, timeoutMs, allowAlwaysApproval: !requireHumanApproval };
             streamEmitter('request_tool_approval', request);
 
             timeoutId = setTimeout(() => {
@@ -141,7 +149,7 @@ class ToolApprovalManager {
     respond(requestId: string, approved: boolean, { always = false }: { always?: boolean } = {}): boolean {
         const pending = this.pending.get(requestId);
         if (!pending) return false;
-        if (approved && always) {
+        if (approved && always && pending.allowAlwaysApproval) {
             addAutoApproval(pending.skillName).catch((error) => this.log(`Could not save auto-approval for ${pending.skillName}`, error));
         }
         pending.settle({ approved, message: approved ? TOOL_APPROVAL_MESSAGES.approved : TOOL_APPROVAL_MESSAGES.rejected });

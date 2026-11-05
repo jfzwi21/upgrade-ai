@@ -93,6 +93,8 @@ export type IToolApprovalRequest = {
   description?: string | null;
   /** Optional arguments shown in the expandable details section */
   payload?: Record<string, any>;
+  /** False for tools that must ask for a fresh human approval on every execution */
+  allowAlwaysApproval?: boolean;
   /** How long the request stays open before it is treated as rejected */
   timeoutMs: number;
 }

@@ -662,6 +662,16 @@
       "status_expired": "提醒時間已過，尚未通過",
       "status_set": "設定提醒 \"{{label}}\""
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "草擬電子郵件",
       "description": "使用助手為您草擬電子郵件。",

@@ -10,6 +10,7 @@ import summarize from './summarize';
 import createFiles from './createFiles';
 import createScheduledJob from './createScheduledJob';
 import setReminder from './setReminder';
+import termuxCommand from './termuxCommand';
 
 export default {
     default: {
@@ -19,6 +20,7 @@ export default {
         getCurrentTime,
         summarize,
         createScheduledJob,
+        termuxCommand,
     },
     createFiles,
     appConnections: {

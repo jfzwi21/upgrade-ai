@@ -690,6 +690,16 @@
       "status_expired": "अलार्म का समय निर्धारित होने से पहले, इसे स्वीकृत नहीं किया गया।",
       "status_set": "अलार्म सेट करें \"{{label}}\""
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "ईमेल का मसौदा",
       "description": "सहायक को आपके लिए एक ईमेल का मसौदा तैयार करने के लिए उपयोग करें।",

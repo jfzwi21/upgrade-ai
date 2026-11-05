@@ -718,6 +718,16 @@
       "status_expired": "Il tempo di promemoria è scaduto prima dell'approvazione.",
       "status_set": "Imposta promemoria \"{{label}}\""
     },
+    "termux_command": {
+      "name": null,
+      "description": null,
+      "status_asking": null,
+      "approval_description": null,
+      "status_not_approved": null,
+      "status_running": null,
+      "status_complete": null,
+      "run_failed": null
+    },
     "draft_email": {
       "name": "Bozza email",
       "description": "Usa l'assistente per scrivere un'email per te.",

@@ -18,9 +18,13 @@ class Telemetry {
     private static instance: Telemetry;
     private analytics: ReturnType<typeof getAnalytics> | null = null;
     private crashlytics: ReturnType<typeof getCrashlytics> | null = null;
+    private initialized = false;
+    private isReady = false;
+    private initializePromise: Promise<void> | null = null;
+    private pendingEvents: Array<{ name: string; params: Record<string, any> }> = [];
     /**
-     * Cached opt-out state so `logEvent` can bail synchronously. Hydrated from storage on
-     * construction; Firebase initialization failures leave telemetry disabled.
+     * Cached opt-out state so `logEvent` can bail synchronously. Hydrated from storage during
+     * initialization; Firebase initialization failures leave telemetry disabled.
      */
     private enabled = true;
     private ready: Promise<void> = Promise.resolve();
@@ -113,6 +117,12 @@ class Telemetry {
     constructor() {
         if (Telemetry.instance) return Telemetry.instance;
         Telemetry.instance = this;
+    }
+
+    /** Initialize Firebase only after the first app UI has committed (or when explicitly needed headlessly). */
+    initialize(): Promise<void> {
+        if (this.initializePromise) return this.initializePromise;
+        this.initialized = true;
         try {
             this.analytics = getAnalytics(getApp());
             // Creating the Crashlytics instance installs its global JS error handler, so fatal JS
@@ -121,8 +131,8 @@ class Telemetry {
         } catch (error) {
             this.disableTelemetry('[Telemetry] Firebase is unavailable; telemetry disabled', error);
         }
-        this.ready = AsyncStorage.getItem(TELEMETRY_ENABLED_KEY)
-            .then(async (value) => {
+        this.initializePromise = AsyncStorage.getItem(TELEMETRY_ENABLED_KEY)
+            .then(async value => {
                 if (!this.analytics || !this.crashlytics) {
                     this.enabled = false;
                     return;
@@ -137,7 +147,14 @@ class Telemetry {
                     ]));
                 }
             })
-            .catch((error) => this.disableTelemetry('[Telemetry] could not initialize telemetry', error));
+            .catch(error => this.disableTelemetry('[Telemetry] could not initialize telemetry', error))
+            .then(() => {
+                this.isReady = true;
+                const queued = this.pendingEvents.splice(0);
+                queued.forEach(({ name, params }) => this.dispatchEvent(name, params));
+            });
+        this.ready = this.initializePromise;
+        return this.initializePromise;
     }
 
     log(message: any, ...args: any[]) {
@@ -149,10 +166,19 @@ class Telemetry {
      * https://rnfirebase.io/analytics/usage#custom-events
      */
     logEvent(name: string, params: Record<string, any> = {}) {
+        if (!this.initialized) {
+            if (this.pendingEvents.length < 100) this.pendingEvents.push({ name, params });
+            return;
+        }
+        if (this.isReady) this.dispatchEvent(name, params);
+        else this.ready.then(() => this.dispatchEvent(name, params));
+    }
+
+    private dispatchEvent(name: string, params: Record<string, any>) {
         const analytics = this.analytics;
         if (!this.enabled || !analytics) return;
         if (isDebugMode) this.log(`Tracking event: ${name}`, params);
-        void this.safelyCallFirebase('Analytics event logging', () => logEvent(analytics, name, params));
+        this.safelyCallFirebase('Analytics event logging', () => logEvent(analytics, name, params));
     }
 
     /**
@@ -163,7 +189,7 @@ class Telemetry {
     recordError(error: Error, context?: string) {
         const crashlytics = this.crashlytics;
         if (!this.enabled || !crashlytics) return;
-        void this.safelyCallFirebase('Crashlytics error reporting', async () => {
+        this.safelyCallFirebase('Crashlytics error reporting', async () => {
             if (context) await logCrashlytics(crashlytics, context.slice(0, 2000));
             await recordError(crashlytics, error);
         });
@@ -209,7 +235,7 @@ class Telemetry {
     private async setCrashContext(breadcrumb: string, attributes: Record<string, string>) {
         const crashlytics = this.crashlytics;
         if (!this.enabled || !crashlytics) return;
-        await this.safelyCallFirebase('Crashlytics context recording', async () => {
+        this.safelyCallFirebase('Crashlytics context recording', async () => {
             await logCrashlytics(crashlytics, breadcrumb);
             await setAttributes(crashlytics, attributes);
         });
@@ -217,7 +243,7 @@ class Telemetry {
 
     /** Whether anonymous telemetry is currently on. Resolves once the stored setting has been read. */
     async isEnabled(): Promise<boolean> {
-        await this.ready;
+        await this.initialize();
         return this.enabled;
     }
 
@@ -227,7 +253,7 @@ class Telemetry {
      * Firebase analytics and crash report collection; every later `logEvent` call returns early.
      */
     async setEnabled(enabled: boolean): Promise<void> {
-        await this.ready;
+        await this.initialize();
         if (enabled === this.enabled) return;
         const analytics = this.analytics;
         const crashlytics = this.crashlytics;

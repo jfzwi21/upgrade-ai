@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, TextAa } from 'phosphor-react-native';
 import SafeView from '@/components/SafeView';
@@ -10,6 +10,7 @@ import Telemetry from '@/utils/Telemetry';
 import { isQuickContextAvailable, isQuickContextEnabled, setQuickContextEnabled } from '@/quickContext';
 import { IWorkspacePageKey } from '../index';
 import { useTranslation } from 'react-i18next';
+import TermuxGuideModal from './TermuxGuideModal';
 
 interface SpecialToolsProps {
   goToPage: (page: IWorkspacePageKey) => void;
@@ -23,6 +24,7 @@ interface SpecialToolsProps {
 export default function SpecialTools({ goToPage }: SpecialToolsProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const [termuxGuideVisible, setTermuxGuideVisible] = useState(false);
   const goBack = () => {
     goToPage('main');
     return true;
@@ -30,6 +32,7 @@ export default function SpecialTools({ goToPage }: SpecialToolsProps) {
   useHighjackBackButtonPress(goBack);
 
   return (
+    <>
     <SafeView
       scrollable={false}
       safeAreaClassNames="pt-[21px]"
@@ -49,8 +52,25 @@ export default function SpecialTools({ goToPage }: SpecialToolsProps) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: insets.bottom + 20, gap: 24 }}>
         <ContextAwarenessSetting />
+        {Platform.OS === 'android' && <TermuxGuideCard onPress={() => setTermuxGuideVisible(true)} />}
       </ScrollView>
     </SafeView>
+    <TermuxGuideModal visible={termuxGuideVisible} onClose={() => setTermuxGuideVisible(false)} />
+    </>
+  );
+}
+
+function TermuxGuideCard({ onPress }: { onPress: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <View className="w-full flex flex-col" style={{ gap: 12 }}>
+      <Text style={{ color: '#9F9FA0' }} className="text-sm uppercase">{t('settings.special_tools.termux_guide_section')}</Text>
+      <TouchableOpacity accessibilityRole="button" onPress={onPress} className="flex flex-col rounded-lg" style={{ backgroundColor: '#1B1B1E', padding: 14, gap: 8 }}>
+        <Text className="text-white text-lg">{t('settings.special_tools.termux_guide_title')}</Text>
+        <Text style={{ color: '#B8B8BA' }} className="text-sm">{t('settings.special_tools.termux_guide_card_description')}</Text>
+        <Text style={{ color: '#FF909A' }} className="text-sm font-medium">{t('settings.special_tools.termux_guide_open')}</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 

@@ -35,9 +35,16 @@ import ErrorBoundary, { RootErrorFallback } from '@/components/ErrorBoundary';
 import { hydrateLanguage } from '@/i18n';
 import HFHubService from '@/services/HFHubService';
 import UpgradeIntro from '@/components/UpgradeIntro';
+import Telemetry from '@/utils/Telemetry';
 
 const Drawer = createDrawerNavigator();
 const App = observer(() => {
+  // Firebase is optional for rendering and must not initialize before the first UI commit.
+  React.useEffect(() => {
+    Telemetry.initialize().catch(error => {
+      console.warn('[App] Telemetry initialization failed; continuing without telemetry', error);
+    });
+  }, []);
   useEnablePushNotifications();
   useNotificationTapNavigation();
   // Files and images other apps share to AnythingLLM open in a new thread with the content attached.

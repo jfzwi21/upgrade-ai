@@ -3,8 +3,6 @@
  */
 
 import {AppRegistry} from 'react-native';
-// Loaded first so Crashlytics' global error handler is in place before any app code runs.
-import './src/utils/Telemetry';
 // Web globals (URL, streams, TextEncoder, crypto, Buffer). Loaded here rather than only through App so the
 // headless scheduled-jobs task, which never loads App, gets them too.
 import './src/utils/polyfills';

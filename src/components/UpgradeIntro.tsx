@@ -24,12 +24,17 @@ export default function UpgradeIntro({ onContinue }: UpgradeIntroProps) {
   const { i18n } = useTranslation();
   const isArabic = i18n.language?.toLowerCase().startsWith('ar') || I18nManager.isRTL;
   const { width, height } = useWindowDimensions();
+  const layoutWidth = width > 0 ? width : 360;
+  const layoutHeight = height > 0 ? height : 760;
   const tiltX = React.useRef(new Animated.Value(0)).current;
   const tiltY = React.useRef(new Animated.Value(0)).current;
   const glow = React.useRef(new Animated.Value(0)).current;
   const entrance = React.useRef(new Animated.Value(0)).current;
   const exiting = React.useRef(false);
-  const cardSize = Math.min(width - 56, 340, Math.max(210, height - 390));
+  const continueCalled = React.useRef(false);
+  const exitTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const cardSize = Math.max(1, Math.min(layoutWidth - 56, 340, Math.max(180, layoutHeight - 390)));
 
   React.useEffect(() => {
     Animated.timing(entrance, {
@@ -44,7 +49,10 @@ export default function UpgradeIntro({ onContinue }: UpgradeIntroProps) {
       ]),
     );
     pulse.start();
-    return () => pulse.stop();
+    return () => {
+      pulse.stop();
+      if (exitTimeout.current) clearTimeout(exitTimeout.current);
+    };
   }, [entrance, glow]);
 
   const tilt = React.useMemo(
@@ -54,7 +62,7 @@ export default function UpgradeIntro({ onContinue }: UpgradeIntroProps) {
         onMoveShouldSetPanResponder: (_, gesture) =>
           Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
         onPanResponderMove: (_, gesture) => {
-          tiltX.setValue(clamp(gesture.dx / (width * 0.38), -1, 1));
+          tiltX.setValue(clamp(gesture.dx / (layoutWidth * 0.38), -1, 1));
           tiltY.setValue(clamp(gesture.dy / 230, -1, 1));
         },
         onPanResponderRelease: () => {
@@ -70,20 +78,32 @@ export default function UpgradeIntro({ onContinue }: UpgradeIntroProps) {
           ]).start();
         },
       }),
-    [tiltX, tiltY, width],
+    [tiltX, tiltY, layoutWidth],
   );
+
+  const completeExit = React.useCallback(() => {
+    if (continueCalled.current) return;
+    continueCalled.current = true;
+    if (exitTimeout.current) clearTimeout(exitTimeout.current);
+    onContinue();
+  }, [onContinue]);
 
   const leaveIntro = React.useCallback(() => {
     if (exiting.current) return;
     exiting.current = true;
-    Animated.timing(entrance, {
-      toValue: 0,
-      duration: 260,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onContinue();
-    });
-  }, [entrance, onContinue]);
+    // Never trap the user behind the intro if the native animation is interrupted or unavailable.
+    exitTimeout.current = setTimeout(completeExit, 500);
+    try {
+      Animated.timing(entrance, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }).start(completeExit);
+    } catch (error) {
+      console.warn('[UpgradeIntro] Exit animation failed; continuing without animation', error);
+      completeExit();
+    }
+  }, [completeExit, entrance]);
 
   const rotateX = tiltY.interpolate({ inputRange: [-1, 1], outputRange: ['10deg', '-10deg'] });
   const rotateY = tiltX.interpolate({ inputRange: [-1, 1], outputRange: ['-13deg', '13deg'] });
@@ -147,12 +167,19 @@ export default function UpgradeIntro({ onContinue }: UpgradeIntroProps) {
                   ],
                 },
               ]}>
-              <Image
-                source={require('../../images/upgrade-ai-app-icon.png')}
-                resizeMode="contain"
-                style={styles.logoImage}
-                accessible={false}
-              />
+              {imageFailed ? (
+                <View style={styles.logoFallback}>
+                  <Text style={styles.logoFallbackText}>U</Text>
+                </View>
+              ) : (
+                <Image
+                  source={require('../../images/upgrade-ai-app-icon.png')}
+                  resizeMode="contain"
+                  style={styles.logoImage}
+                  accessible={false}
+                  onError={() => setImageFailed(true)}
+                />
+              )}
             </Animated.View>
             <View pointerEvents="none" style={styles.depthLabel}>
               <Text style={styles.depthLabelText}>3D / TOUCH</Text>
@@ -288,6 +315,17 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
+  },
+  logoFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1B0B10',
+  },
+  logoFallbackText: {
+    color: '#FF4858',
+    fontSize: 72,
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   depthLabel: {
     position: 'absolute',

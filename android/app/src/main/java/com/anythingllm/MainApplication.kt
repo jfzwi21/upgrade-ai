@@ -1,6 +1,7 @@
 package com.anythingllm
 
 import android.app.Application
+import android.util.Log
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -27,25 +28,35 @@ class MainApplication : Application(), ReactApplication {
 
   override val reactNativeHost: ReactNativeHost =
       object : DefaultReactNativeHost(this) {
-        override fun getPackages(): List<ReactPackage> =
-            PackageList(this).packages.apply {
-              add(DeviceInfoPackage())
-              add(KeepAwakePackage())
-              add(ScreenLockPackage())
-              add(DownloadPackage())
-              add(StoragePackage())
-              add(VectorBoxPackage())
-              add(WebScraperPackage())
-              add(PdfParserPackage())
-              add(ScheduledJobsPackage())
-              add(SharedContentPackage())
-              add(QuickContextPackage())
-              add(AssistantPackage())
-              add(MessagingPackage())
-              add(AlarmPackage())
-              add(LoopbackAuthPackage())
-              add(TermuxBridgePackage())
+        override fun getPackages(): List<ReactPackage> {
+          val packages = PackageList(this).packages.toMutableList()
+          val registeredPackageClasses = packages.mapTo(mutableSetOf<String>()) { it.javaClass.name }
+          val manuallyRegisteredPackages = listOf(
+            DeviceInfoPackage(),
+            KeepAwakePackage(),
+            ScreenLockPackage(),
+            DownloadPackage(),
+            StoragePackage(),
+            VectorBoxPackage(),
+            WebScraperPackage(),
+            PdfParserPackage(),
+            ScheduledJobsPackage(),
+            SharedContentPackage(),
+            QuickContextPackage(),
+            AssistantPackage(),
+            MessagingPackage(),
+            AlarmPackage(),
+            LoopbackAuthPackage(),
+            TermuxBridgePackage(),
+          )
+
+          manuallyRegisteredPackages.forEach { packageInstance ->
+            if (registeredPackageClasses.add(packageInstance.javaClass.name)) {
+              packages.add(packageInstance)
             }
+          }
+          return packages
+        }
 
         override fun getJSMainModuleName(): String = "index"
 
@@ -60,6 +71,14 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    loadReactNative(this)
+    try {
+      loadReactNative(this)
+    } catch (error: Throwable) {
+      Log.e(TAG, "Failed to load React Native during application startup", error)
+    }
+  }
+
+  private companion object {
+    const val TAG = "MainApplication"
   }
 }

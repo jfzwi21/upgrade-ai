@@ -37,6 +37,8 @@ class PushNotifications {
      * `permissionUndecided` instead of racing this flag.
      */
     public permissionUndecided: boolean = false;
+    private initializationStarted = false;
+    private shouldRequestPermission = false;
 
     static getInstance() {
         if (!PushNotifications.instance) PushNotifications.instance = new PushNotifications();
@@ -46,7 +48,6 @@ class PushNotifications {
     constructor() {
         if (PushNotifications.instance) return PushNotifications.instance;
         PushNotifications.instance = this;
-        this.initialize();
         return PushNotifications.instance;
     }
 
@@ -59,7 +60,14 @@ class PushNotifications {
         this.permissionUndecided = settings.authorizationStatus === AuthorizationStatus.NOT_DETERMINED;
     }
 
-    private initialize() {
+    /** Start notification setup after the app has shown its first UI. */
+    public start(options: { requestPermission?: boolean } = {}) {
+        if (options.requestPermission) this.shouldRequestPermission = true;
+        if (this.initializationStarted) {
+            if (this.shouldRequestPermission && this.permissionUndecided) this.requestPermission();
+            return;
+        }
+        this.initializationStarted = true;
         // Check if notifications are enabled, set initial state of notificationsEnabled
         // then on requestPermission, update the state with the new settings (if the user has not already granted permissions)
         notifee.getNotificationSettings().then(settings => {
@@ -67,8 +75,8 @@ class PushNotifications {
             if (this.notificationsEnabled) return;
 
             // If the user has not yet granted permissions, request them. Otherwise, honor their denial/provisional status
-            if (settings.authorizationStatus === AuthorizationStatus.NOT_DETERMINED) this.requestPermission();
-        });
+            if (this.shouldRequestPermission && settings.authorizationStatus === AuthorizationStatus.NOT_DETERMINED) this.requestPermission();
+        }).catch(error => this.log('Failed to read notification permission state', error));
 
         // A user who enables notifications from system settings comes back to the app with new state.
         AppState.addEventListener('change', state => { if (state === 'active') this.refreshSettings(); });
@@ -83,7 +91,8 @@ class PushNotifications {
         notifee.createChannel({
             id: 'anythingllm-channel',
             name: 'Upgrade AI',
-        }).then(createdChannelId => this.channels.primary = createdChannelId);
+        }).then(createdChannelId => { this.channels.primary = createdChannelId; })
+            .catch(error => this.log('Failed to create primary notification channel', error));
 
         // Progress channel to prevent vibration/sounds
         notifee.createChannel({
@@ -92,7 +101,8 @@ class PushNotifications {
             vibration: false,
             importance: 3,
             vibrationPattern: [],
-        }).then(createdChannelId => this.channels.progress = createdChannelId);
+        }).then(createdChannelId => { this.channels.progress = createdChannelId; })
+            .catch(error => this.log('Failed to create progress notification channel', error));
 
         // Chat replies finishing while the app is in the background. High importance so it
         // heads-up on the lock screen, with a single short buzz rather than the default pattern.
@@ -105,7 +115,8 @@ class PushNotifications {
             vibration: true,
             vibrationPattern: [50, 250],
             sound: 'default',
-        }).then(createdChannelId => this.channels.chat = createdChannelId);
+        }).then(createdChannelId => { this.channels.chat = createdChannelId; })
+            .catch(error => this.log('Failed to create chat notification channel', error));
 
         // A scheduled job finished with something to show. Same heads-up treatment as chat replies.
         notifee.createChannel({
@@ -116,7 +127,8 @@ class PushNotifications {
             vibration: true,
             vibrationPattern: [50, 250],
             sound: 'default',
-        }).then(createdChannelId => this.channels.jobs = createdChannelId);
+        }).then(createdChannelId => { this.channels.jobs = createdChannelId; })
+            .catch(error => this.log('Failed to create scheduled-job notification channel', error));
     }
 
     /**
@@ -327,7 +339,7 @@ function jobRouteFromNotification(notification?: Notification | null): Scheduled
 
 export default PushNotifications.getInstance();
 export function useEnablePushNotifications() {
-    useEffect(() => { PushNotifications.getInstance(); }, []);
+    useEffect(() => { PushNotifications.getInstance().start({ requestPermission: true }); }, []);
 }
 
 /**

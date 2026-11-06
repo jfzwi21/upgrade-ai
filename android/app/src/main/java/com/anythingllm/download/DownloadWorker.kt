@@ -40,11 +40,6 @@ class DownloadWorker(
         currentCall?.cancel()
     }
 
-    override fun onStopped() {
-        handleStopped()
-        super.onStopped()
-    }
-
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val downloadId = inputData.getString(KEY_DOWNLOAD_ID) ?: return@withContext Result.failure()

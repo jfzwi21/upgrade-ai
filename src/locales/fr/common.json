@@ -1033,6 +1033,10 @@
         "name": "Équilibré",
         "description": "Pour un équilibre entre la vitesse et la précision."
       },
+      "iraqi": {
+        "name": "Arabe irakien",
+        "description": "Qwen 2B configuré pour des réponses pratiques en arabe irakien clair et l’utilisation structurée des outils."
+      },
       "powerful": {
         "name": "Puissant",
         "description": "Modèles plus lourds pour la meilleure précision."

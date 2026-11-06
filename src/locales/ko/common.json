@@ -957,6 +957,10 @@
         "name": "균형잡힌",
         "description": "속도와 정확도의 균형을 위해."
       },
+      "iraqi": {
+        "name": "이라크 아랍어",
+        "description": "명확하고 실용적인 이라크 아랍어 대화와 구조화된 도구 사용을 위한 Qwen 2B."
+      },
       "powerful": {
         "name": "강력함",
         "description": "최고의 정확도를 위한 무거운 모델."

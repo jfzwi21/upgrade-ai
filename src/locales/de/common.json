@@ -995,6 +995,10 @@
         "name": "Ausgewogen",
         "description": "Für ein Gleichgewicht zwischen Geschwindigkeit und Genauigkeit."
       },
+      "iraqi": {
+        "name": "Irakisches Arabisch",
+        "description": "Qwen 2B für klare, praxisnahe irakisch-arabische Antworten und strukturierte Tool-Nutzung."
+      },
       "powerful": {
         "name": "Leistungsstark",
         "description": "Schwerere Modelle für die beste Genauigkeit."

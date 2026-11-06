@@ -11,6 +11,7 @@ import AnythingLLMExternal from '@/utils/AnythingLLMExternal';
 import Telemetry from '@/utils/Telemetry';
 import { getDefaultContextLength } from '@/utils/contextLength';
 import i18n from '@/i18n';
+import { IRAQI_SYSTEM_INSTRUCTIONS } from '@/utils/assistant/iraqiPersona';
 
 export type WorkspaceType = {
   name: string;
@@ -51,7 +52,7 @@ export default class Workspace extends Model {
   static get defaultName(): string {
     return i18n.t('new_workspace.default_name');
   }
-  static defaultSystemPrompt = `You are a helpful assistant that can answer questions and help with tasks.`;
+  static defaultSystemPrompt = IRAQI_SYSTEM_INSTRUCTIONS;
 
   /**
    * `null` = no override. Providers then omit `temperature` from the request so the provider's

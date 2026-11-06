@@ -24,6 +24,7 @@ export type IOnDeviceAvailableModel = {
   description: string;
   size: number | string;
   downloadUrl: string;
+  systemPrompt?: string;
   isPreset: boolean;
   /** Display name of the organisation behind the model (Google, IBM Research, ...). Used to group lists. */
   provider?: string;
@@ -233,6 +234,7 @@ export default class OnDeviceProvider extends BaseOpenAILikeProvider {
       size: defaultModels.find(d => d.id === m.modelId)?.size ?? m.size,
       modelId: m.modelId,
       downloadUrl: m.tag,
+      systemPrompt: m.systemPrompt,
       isPreset: true,
     }));
 

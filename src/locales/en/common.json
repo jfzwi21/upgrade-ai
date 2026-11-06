@@ -995,6 +995,10 @@
         "name": "Balanced",
         "description": "For a balance of speed and accuracy."
       },
+      "iraqi": {
+        "name": "Iraqi Arabic",
+        "description": "Qwen 2B configured for clear, practical Iraqi Arabic and structured tool use."
+      },
       "powerful": {
         "name": "Powerful",
         "description": "Heavier models for the best accuracy."

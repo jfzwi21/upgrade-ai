@@ -1071,6 +1071,10 @@
         "name": "Zrównoważona",
         "description": "Do równowagi szybkości i dokładności."
       },
+      "iraqi": {
+        "name": "Arabski iracki",
+        "description": "Qwen 2B do jasnych, praktycznych odpowiedzi po iracku i uporządkowanego korzystania z narzędzi."
+      },
       "powerful": {
         "name": "Potężny",
         "description": "Cięższe modele do najlepszej dokładności."

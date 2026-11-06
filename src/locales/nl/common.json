@@ -995,6 +995,10 @@
         "name": "Uitgebalanceerd",
         "description": "Voor een balans tussen snelheid en nauwkeurigheid."
       },
+      "iraqi": {
+        "name": "Iraaks-Arabisch",
+        "description": "Qwen 2B voor duidelijke, praktische Iraaks-Arabische antwoorden en gestructureerd toolgebruik."
+      },
       "powerful": {
         "name": "Krachtig",
         "description": "Zwaardere modellen voor de beste nauwkeurigheid."

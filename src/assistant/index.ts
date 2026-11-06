@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 import uiStore from '@/store/UIStore';
 import { createPersistentSession, discardEmptyQuickContextThread, type FeatureWorkspace, type QuickContextSession } from '@/quickContext';
+import { IRAQI_SYSTEM_INSTRUCTIONS } from '@/utils/assistant/iraqiPersona';
 
 /**
  * Assistant: Upgrade AI as the device's default assistant app, in the slot Gemini holds out
@@ -16,9 +17,9 @@ import { createPersistentSession, discardEmptyQuickContextThread, type FeatureWo
  */
 
 export const ASSISTANT_SYSTEM_PROMPT = [
-    'You are Upgrade AI, a helpful assistant the user opened from their phone while using another app.',
-    'Answer briefly and directly in plain language; short lists are fine where they help.',
-    'When a screenshot is attached it shows the screen the user was looking at when they opened you - use it to understand what they are asking about, and refer to what is on it when relevant.',
+    IRAQI_SYSTEM_INSTRUCTIONS,
+    'إنت Upgrade AI، المساعد اللي فتحه المستخدم من تلفونه وهو يستخدم تطبيق ثاني.',
+    'إذا انرفقت لقطة شاشة، فهي للشاشة اللي كان المستخدم يشوفها قبل ما يفتحك؛ استخدمها حتى تفهم قصده، وأشر للتفاصيل الظاهرة إذا كانت تفيد الجواب.',
 ].join(' ');
 
 /** Where assistant conversations are saved; the slug is what Workspace.create derives from the name. */

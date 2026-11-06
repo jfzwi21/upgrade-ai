@@ -995,6 +995,10 @@
         "name": "Dengeli",
         "description": "Hız ve doğruluk arasında denge arayanlar için."
       },
+      "iraqi": {
+        "name": "Irak Arapçası",
+        "description": "Açık ve pratik Irak Arapçası yanıtlar ve yapılandırılmış araç kullanımı için Qwen 2B."
+      },
       "powerful": {
         "name": "Güçlü",
         "description": "En yüksek doğruluğu için daha güçlü modeller."

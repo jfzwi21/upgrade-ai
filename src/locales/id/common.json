@@ -957,6 +957,10 @@
         "name": "Seimbang",
         "description": "Untuk keseimbangan kecepatan dan akurasi."
       },
+      "iraqi": {
+        "name": "Arab Irak",
+        "description": "Qwen 2B untuk percakapan bahasa Arab Irak yang jelas dan praktis serta penggunaan alat terstruktur."
+      },
       "powerful": {
         "name": "Kuat",
         "description": "Model yang lebih berat untuk akurasi terbaik."

@@ -957,6 +957,10 @@
         "name": "平衡",
         "description": "平衡速度和准确性。"
       },
+      "iraqi": {
+        "name": "伊拉克阿拉伯语",
+        "description": "适用于清晰实用的伊拉克阿拉伯语对话和结构化工具调用的 Qwen 2B。"
+      },
       "powerful": {
         "name": "强大",
         "description": "用于最佳准确性的更重模型。"

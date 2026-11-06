@@ -957,6 +957,10 @@
         "name": "Cân bằng",
         "description": "Để cân bằng giữa tốc độ và độ chính xác."
       },
+      "iraqi": {
+        "name": "Tiếng Ả Rập Iraq",
+        "description": "Qwen 2B cho câu trả lời tiếng Ả Rập Iraq rõ ràng, thiết thực và sử dụng công cụ có cấu trúc."
+      },
       "powerful": {
         "name": "Mạnh mẽ",
         "description": "Các mô hình nặng hơn để có độ chính xác tốt nhất."

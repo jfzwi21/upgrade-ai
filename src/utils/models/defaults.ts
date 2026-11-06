@@ -1,6 +1,7 @@
 import { Feather, Scales, Barbell } from "phosphor-react-native";
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import { tKey } from '@/i18n';
+import { IRAQI_SYSTEM_INSTRUCTIONS } from '@/utils/assistant/iraqiPersona';
 
 export type DefaultModel = {
     id: string;
@@ -10,6 +11,7 @@ export type DefaultModel = {
     size: string;
     modelId: string;
     tag: string;
+    systemPrompt?: string;
     isPreset: boolean;
 }
 
@@ -38,6 +40,16 @@ export const MODEL_CARDS = [
         size: '2.01GB',
         modelId: 'unsloth/Qwen3.5-2B-GGUF',
         tag: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q8_0.gguf',
+    },
+    {
+        id: 'iraqi',
+        name: tKey('models.presets.iraqi.name'),
+        description: tKey('models.presets.iraqi.description'),
+        Icon: Scales,
+        size: '2.01GB',
+        modelId: 'unsloth/Qwen3.5-2B-GGUF',
+        tag: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q8_0.gguf',
+        systemPrompt: IRAQI_SYSTEM_INSTRUCTIONS,
     },
     {
         id: 'powerful',

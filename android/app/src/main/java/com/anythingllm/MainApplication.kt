@@ -10,6 +10,7 @@ import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
+import cat.ereza.customactivityoncrash.CustomActivityOnCrash
 import cat.ereza.customactivityoncrash.config.CaocConfig
 import com.anythingllm.download.DownloadPackage
 import com.anythingllm.storage.StoragePackage
@@ -79,10 +80,12 @@ class MainApplication : Application(), ReactApplication {
       .showErrorDetails(true)
       .showRestartButton(true)
       .apply()
+    CustomActivityOnCrash.install(this)
     try {
       loadReactNative(this)
     } catch (error: Throwable) {
       Log.e(TAG, "Failed to load React Native during application startup", error)
+      throw RuntimeException("Failed to load React Native during application startup", error)
     }
   }
 

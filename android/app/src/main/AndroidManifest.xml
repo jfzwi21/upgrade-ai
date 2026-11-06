@@ -105,6 +105,10 @@
           android:name="android.support.FILE_PROVIDER_PATHS"
           android:resource="@xml/file_paths" />
       </provider>
+      <activity
+        android:name="cat.ereza.customactivityoncrash.activity.DefaultErrorActivity"
+        android:process=":error_activity"
+        android:exported="false" />
       <receiver
         android:name=".termux.TermuxCommandResultReceiver"
         android:exported="false" />

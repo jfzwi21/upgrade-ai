@@ -41,37 +41,48 @@ export default function useInitialRoute(): { initialRoute: InitialRoute, isLoadi
   // uiStore.getAllFromStorage().then(console.log);
 
   useEffect(() => {
+    let active = true;
+
     async function checkForInitialRoute() {
-      const staticRoute = await determineInitialRoute();
+      try {
+        const staticRoute = await determineInitialRoute();
+        if (!active) return;
 
-      // If the user is not onboarded, we need to redirect them to the onboarding flow
-      if (staticRoute !== DEFAULT_INITIAL_ROUTE) {
-        setInitialRoute({ path: staticRoute, params: {} });
-        setIsLoading(false);
-        return;
+        // If the user is not onboarded, redirect to the onboarding flow.
+        if (staticRoute !== DEFAULT_INITIAL_ROUTE) {
+          setInitialRoute({ path: staticRoute, params: {} });
+          return;
+        }
+
+        // A crash-loop launch must not reopen the last workspace/thread that may have caused it.
+        // Its data remains untouched; the user can still reach healthy workspaces from Home.
+        if (SafeModeService.isEnabled()) {
+          setInitialRoute({ path: PATHS.home, params: {} });
+          return;
+        }
+
+        // Onboarded: open the last chat (or the first workspace's thread).
+        const chatRoute = await resolveDefaultChatRoute();
+        if (!active) return;
+        const route: InitialRoute = chatRoute
+          ? { path: PATHS.workspace_chat, params: chatRoute }
+          : { path: staticRoute, params: {} };
+        console.log('[InitialRoute]', route.path, route.params);
+        setInitialRoute(route);
+      } catch (error) {
+        // Storage/initialization failures must not leave the splash screen up forever
+        // or become an unhandled rejection that can terminate the JS runtime.
+        console.error('[InitialRoute] Failed to determine startup route; opening Home', error);
+        if (active) setInitialRoute({ path: PATHS.home, params: {} });
+      } finally {
+        if (active) setIsLoading(false);
       }
-
-      // A crash-loop launch must not reopen the last workspace/thread that may have caused it.
-      // Its data remains untouched; the user can still reach healthy workspaces from Home.
-      if (SafeModeService.isEnabled()) {
-        setInitialRoute({ path: PATHS.home, params: {} });
-        setIsLoading(false);
-        return;
-      }
-
-      // Onboarded: open the thread they last chatted in (or the first workspace's
-      // thread). Home is only for the no-workspaces case - it also re-checks this
-      // itself on mount, so landing there with workspaces self-corrects.
-      const chatRoute = await resolveDefaultChatRoute();
-      const route: InitialRoute = chatRoute
-        ? { path: PATHS.workspace_chat, params: chatRoute }
-        : { path: staticRoute, params: {} };
-      console.log('[InitialRoute]', route.path, route.params);
-      setInitialRoute(route);
-      setIsLoading(false);
     }
 
-    checkForInitialRoute();
+    void checkForInitialRoute();
+    return () => {
+      active = false;
+    };
   }, []);
 
   return { initialRoute, isLoading };

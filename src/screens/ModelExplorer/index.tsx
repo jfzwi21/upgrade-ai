@@ -106,7 +106,7 @@ export default function ModelExplorer() {
       const details = await HFHubService.fetchGGUFDetails(model.id);
       setRepoDetails(details);
       const statuses = await Promise.all(details.quants.map(async quant => {
-        const modelId = importedModelId(details.repo.id, quant.filename);
+        const modelId = importedModelId(details.repo.id, quant.path);
         const path = resolveDestinationPathFromGGUFUrl(quant.downloadUrl);
         return [modelId, await RNFS.exists(path)] as const;
       }));
@@ -379,7 +379,7 @@ function RepositoryDetails({
           <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginTop: 3 }}>{t('model_explorer.quant_title')}</Text>
           {!details.quants.length && <Text style={{ color: '#A4A4A8', fontSize: 13 }}>{t('model_explorer.no_gguf_files')}</Text>}
           {details.quants.map((quant, index) => {
-            const modelId = importedModelId(details.repo.id, quant.filename);
+            const modelId = importedModelId(details.repo.id, quant.path);
             const isInstalled = installedIds.has(modelId);
             const isDownloading = activeDownload?.modelId === modelId;
             const disabled = details.repo.gated || (!!activeDownload && !isDownloading) || isInstalled;

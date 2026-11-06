@@ -1,6 +1,6 @@
 import DeviceInfo from "react-native-device-info";
 import { useEffect, useState } from "react";
-import { Linking, Text, TouchableOpacity, View } from "react-native";
+import { Linking, Platform, Text, TouchableOpacity, View } from "react-native";
 import { WarningCircle } from "phosphor-react-native";
 import semver from "semver";
 import AwaitableAlert from "@/components/AwaitableAlert";
@@ -14,32 +14,36 @@ export default function ApkVersion() {
     const [remoteVersion, setRemoteVersion] = useState<string>(deviceVersion);
 
     useEffect(() => {
+        if (Platform.OS !== 'android') return;
+        let active = true;
         const fetchRemoteVersion = async () => {
             try {
-                // returns something like: 1.0.2
-                await fetch(PATHS.remote_version_url, {
+                const response = await fetch(PATHS.latest_release_api, {
                     method: 'GET',
-                    headers: { 'Content-Type': 'text/plain' },
-                }).then(res => {
-                    if (!res.ok) throw new Error('Failed to fetch remote version');
-                    return res.text();
-                }).then(text => {
-                    const remoteVersion = sanitizeVersion(text);
-                    if (!semver.valid(remoteVersion)) throw new Error('Invalid remote version');
-                    if (semver.lt(deviceVersion, remoteVersion)) {
-                        setIsOnLatestVersion(false);
-                        setRemoteVersion(remoteVersion);
-                    } else {
-                        setIsOnLatestVersion(true);
-                        setRemoteVersion(deviceVersion);
-                    }
+                    headers: { Accept: 'application/vnd.github+json' },
                 });
+                if (!response.ok) throw new Error('Failed to fetch the latest GitHub release');
+                const release = await response.json();
+                if (typeof release?.tag_name !== 'string') throw new Error('Latest GitHub release has no tag');
+                const latestVersion = sanitizeVersion(release.tag_name);
+                if (!semver.valid(latestVersion)) throw new Error('Invalid remote version');
+                if (!active) return;
+                if (semver.lt(deviceVersion, latestVersion)) {
+                    setIsOnLatestVersion(false);
+                    setRemoteVersion(latestVersion);
+                } else {
+                    setIsOnLatestVersion(true);
+                    setRemoteVersion(deviceVersion);
+                }
             } catch (error) {
-                console.error('fetchRemoteVersion:', error);
+                if (active) console.error('fetchRemoteVersion:', error);
             }
         };
-        fetchRemoteVersion();
-    }, []);
+        void fetchRemoteVersion();
+        return () => {
+            active = false;
+        };
+    }, [deviceVersion]);
 
     return (
         <View className="flex flex-row items-end justify-between">
@@ -56,7 +60,7 @@ export default function ApkVersion() {
                         await AwaitableAlert(
                             t('settings.version.update_available_title'),
                             t('settings.version.update_available_message', { version: remoteVersion }),
-                            { text: t('settings.version.go_to_app_store'), onPress: () => { Linking.openURL(PATHS.google_play_store) } },
+                            { text: t('settings.updater.download_install'), onPress: () => { Linking.openURL(PATHS.latest_release_page) } },
                             { text: t('common.cancel'), onPress: () => { }, style: 'cancel' },
                         )
                     }}>

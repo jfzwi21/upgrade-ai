@@ -5,6 +5,14 @@ type ChangelogEntry = {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.3.5',
+    content: [
+      '- **More reliable startup** — recover to Home if saved startup state cannot be read, instead of leaving the app on its loading screen',
+      '- **Safer Termux approvals** — the exact command and arguments are visible before you approve them',
+      '- **Improved model downloads** — nested Hugging Face GGUF files stay distinct, and cancelled downloads stop their network request cleanly',
+    ].join('\n'),
+  },
+  {
     version: '1.3.2',
     content: [
       '- **Onboarding fix** — if setup was interrupted, the app now picks up where you left off instead of skipping the last step',

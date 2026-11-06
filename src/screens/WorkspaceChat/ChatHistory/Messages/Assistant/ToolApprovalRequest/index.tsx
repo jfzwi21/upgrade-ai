@@ -58,6 +58,7 @@ function ToolApprovalCard({ node }: { node: IToolApprovalActivity }) {
     // Guard against a double tap landing before the settled snapshot arrives.
     const [responded, setResponded] = useState(false);
     const hasPayload = !!node.payload && Object.keys(node.payload).length > 0;
+    const mustShowPayload = node.skillName === 'termux_command';
     const toolName = ToolsManager.displayNameFor(node.skillName);
 
     const respond = (approved: boolean) => {
@@ -85,22 +86,24 @@ function ToolApprovalCard({ node }: { node: IToolApprovalActivity }) {
 
             {hasPayload && (
                 <View style={{ gap: 8 }}>
-                    <Pressable
-                        onPress={() => setIsExpanded((v) => !v)}
-                        hitSlop={8}
-                        accessibilityRole="button"
-                        accessibilityState={{ expanded: isExpanded }}
-                        className="flex flex-row items-center self-start"
-                        style={{ gap: 4 }}
-                    >
-                        <Text style={{ color: COLORS.muted }} className="text-xs font-medium">
-                            {isExpanded ? t('chat.tool_approval.hide_details') : t('chat.tool_approval.show_details')}
-                        </Text>
-                        <View style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}>
-                            <CaretDown size={12} color={COLORS.muted} weight="bold" />
-                        </View>
-                    </Pressable>
-                    {isExpanded && (
+                    {!mustShowPayload && (
+                        <Pressable
+                            onPress={() => setIsExpanded((v) => !v)}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: isExpanded }}
+                            className="flex flex-row items-center self-start"
+                            style={{ gap: 4 }}
+                        >
+                            <Text style={{ color: COLORS.muted }} className="text-xs font-medium">
+                                {isExpanded ? t('chat.tool_approval.hide_details') : t('chat.tool_approval.show_details')}
+                            </Text>
+                            <View style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}>
+                                <CaretDown size={12} color={COLORS.muted} weight="bold" />
+                            </View>
+                        </Pressable>
+                    )}
+                    {(isExpanded || mustShowPayload) && (
                         <View style={{ backgroundColor: COLORS.payload, borderRadius: 8, padding: 12 }}>
                             <Text style={{ color: COLORS.payloadText, fontSize: 12, lineHeight: 16, fontFamily: 'monospace' }}>{formatPayload(node.payload)}</Text>
                         </View>

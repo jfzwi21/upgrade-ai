@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -42,12 +44,13 @@ class TermuxBridgeModule(reactContext: ReactApplicationContext) : ReactContextBa
             }
             val pendingIntentFlags = PendingIntent.FLAG_ONE_SHOT or
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-            resultPendingIntent = PendingIntent.getBroadcast(
+            val callbackPendingIntent = PendingIntent.getBroadcast(
                 reactApplicationContext,
                 requestCode,
                 callbackIntent,
                 pendingIntentFlags
             )
+            resultPendingIntent = callbackPendingIntent
 
             val runIntent = Intent(ACTION_RUN_COMMAND).apply {
                 setClassName(TERMUX_PACKAGE, TERMUX_RUN_COMMAND_SERVICE)
@@ -56,13 +59,25 @@ class TermuxBridgeModule(reactContext: ReactApplicationContext) : ReactContextBa
                 putExtra(EXTRA_WORKDIR, workingDirectory?.trim().takeUnless { it.isNullOrEmpty() } ?: TERMUX_HOME)
                 // Background mode is required for Termux to return stdout and stderr separately.
                 putExtra(EXTRA_BACKGROUND, true)
-                putExtra(EXTRA_PENDING_INTENT, resultPendingIntent)
+                putExtra(EXTRA_PENDING_INTENT, callbackPendingIntent)
             }
 
-            pendingPromises[requestCode] = promise
+            val timeoutTask = Runnable {
+                val pending = pendingPromises.remove(requestCode) ?: return@Runnable
+                pending.pendingIntent.cancel()
+                pending.promise.reject(
+                    "TERMUX_COMMAND_TIMEOUT",
+                    "Termux did not return a result within the allowed time."
+                )
+            }
+            pendingPromises[requestCode] = PendingTermuxRequest(promise, callbackPendingIntent, timeoutTask)
+            mainHandler.postDelayed(timeoutTask, COMMAND_TIMEOUT_MS)
             reactApplicationContext.startService(runIntent)
         } catch (error: Exception) {
-            pendingPromises.remove(requestCode)
+            pendingPromises.remove(requestCode)?.let { pending ->
+                mainHandler.removeCallbacks(pending.timeoutTask)
+                pending.pendingIntent.cancel()
+            }
             resultPendingIntent?.cancel()
             promise.reject(
                 "TERMUX_COMMAND_START_FAILED",
@@ -70,6 +85,17 @@ class TermuxBridgeModule(reactContext: ReactApplicationContext) : ReactContextBa
                 error
             )
         }
+    }
+
+    override fun invalidate() {
+        pendingPromises.entries.toList().forEach { (requestCode, pending) ->
+            if (pendingPromises.remove(requestCode, pending)) {
+                mainHandler.removeCallbacks(pending.timeoutTask)
+                pending.pendingIntent.cancel()
+                pending.promise.reject("TERMUX_BRIDGE_INVALIDATED", "The Termux bridge was closed before the command completed.")
+            }
+        }
+        super.invalidate()
     }
 
     companion object {
@@ -92,12 +118,22 @@ class TermuxBridgeModule(reactContext: ReactApplicationContext) : ReactContextBa
         private const val EXTRA_EXIT_CODE = "exitCode"
         private const val EXTRA_TERMUX_ERROR = "err"
         private const val EXTRA_TERMUX_ERROR_MESSAGE = "errmsg"
+        private const val COMMAND_TIMEOUT_MS = 15L * 60L * 1000L
 
         private val nextRequestCode = AtomicInteger(1000)
-        private val pendingPromises = ConcurrentHashMap<Int, Promise>()
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private val pendingPromises = ConcurrentHashMap<Int, PendingTermuxRequest>()
+
+        private data class PendingTermuxRequest(
+            val promise: Promise,
+            val pendingIntent: PendingIntent,
+            val timeoutTask: Runnable,
+        )
 
         internal fun deliverResult(requestCode: Int, bundle: Bundle?) {
-            val promise = pendingPromises.remove(requestCode) ?: return
+            val pending = pendingPromises.remove(requestCode) ?: return
+            mainHandler.removeCallbacks(pending.timeoutTask)
+            pending.pendingIntent.cancel()
             val result = Arguments.createMap()
             result.putString("stdout", bundle?.getString(EXTRA_STDOUT).orEmpty())
             result.putString("stderr", bundle?.getString(EXTRA_STDERR).orEmpty())
@@ -110,7 +146,7 @@ class TermuxBridgeModule(reactContext: ReactApplicationContext) : ReactContextBa
             } else if (termuxErrorCode != -1 || !termuxErrorMessage.isNullOrBlank()) {
                 result.putString("error", termuxErrorMessage ?: "Termux could not start the command (error $termuxErrorCode).")
             }
-            promise.resolve(result)
+            pending.promise.resolve(result)
         }
     }
 }

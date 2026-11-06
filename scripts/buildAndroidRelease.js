@@ -1,6 +1,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { getAndroidBuildMetadata } = require('./androidBuildMetadata');
 
 // Load the root .env (the same file Gradle reads via react-native-config) so the
 // signing password is available even when it is not exported in the shell.
@@ -17,9 +18,7 @@ function loadDotEnv(envPath = '.env') {
 }
 loadDotEnv();
 
-// Read package.json to get version
-const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-const version = packageJson.version;
+const { versionName: version, versionCode } = getAndroidBuildMetadata();
 
 console.log(`Building Android release with version: ${version}`);
 
@@ -70,6 +69,14 @@ function getJavaCommand() {
 }
 
 try {
+    const keystorePath = 'android/app/upgradeai-upload-key.keystore';
+    const keystorePassword = process.env.APP_RELEASE_STORE_PASSWORD;
+    const keystoreKeyPassword = process.env.APP_RELEASE_KEY_PASSWORD;
+    const keystoreAlias = 'upgradeai-keystore';
+    if (!keystorePassword) throw new Error('APP_RELEASE_STORE_PASSWORD environment variable is not set.');
+    if (!keystoreKeyPassword) throw new Error('APP_RELEASE_KEY_PASSWORD environment variable is not set.');
+    if (!fs.existsSync(keystorePath)) throw new Error(`Keystore file not found: ${keystorePath}`);
+
     // Clean up release folder
     if (fs.existsSync('release')) fs.rmSync('release', { recursive: true });
 
@@ -78,12 +85,14 @@ try {
     runCommand(isWindows ? 'cd android && gradlew clean && cd ..' : 'cd android && ./gradlew clean && cd ..');
 
     console.log('Building the AAB bundle...');
-    runCommand(isWindows ? 'cd android && gradlew bundleRelease && cd ..' : 'cd android && ./gradlew bundleRelease && cd ..');
+    const versionArguments = `-PUPGRADE_AI_VERSION_NAME=${version} -PUPGRADE_AI_VERSION_CODE=${versionCode}`;
+    runCommand(isWindows
+        ? `cd android && gradlew bundleRelease ${versionArguments} && cd ..`
+        : `cd android && ./gradlew bundleRelease ${versionArguments} && cd ..`);
 
     // Keep the JS sourcemap for this exact build - it is the only way to decode the
     // `index.android.bundle:1:<col>` frames in Crashlytics JS crash reports. Stored outside
     // release/ and android/build/ since both are wiped at the start of every build.
-    const versionCode = fs.readFileSync('android/app/build.gradle', 'utf8').match(/versionCode\s+(\d+)/)[1];
     const sourcemapFolder = `sourcemaps/android/v${version}-${versionCode}`;
     fs.mkdirSync(sourcemapFolder, { recursive: true });
     fs.copyFileSync(
@@ -97,19 +106,6 @@ try {
     const aabPath = 'android/app/build/outputs/bundle/release/app-release.aab';
     const apksOutputPath = `android/app/build/outputs/apks/app-release-v${version}-universal.apks`;
 
-    console.log('Validating keystore files exist...');
-    const keystorePath = 'android/app/anythingllm-upload-key.keystore';
-    const keystorePassword = process.env.APP_RELEASE_STORE_PASSWORD;
-    const keystoreAlias = 'anythingllm-keystore';
-    if (!keystorePassword) {
-        console.error('APP_RELEASE_STORE_PASSWORD environment variable is not set.');
-        process.exit(1);
-    }
-    if (!fs.existsSync(keystorePath)) {
-        console.error('Keystore file not found. Please ensure the keystore file exists at android/app/anythingllm-upload-key.keystore');
-        process.exit(1);
-    }
-
     // Get Java command
     const javaCommand = getJavaCommand();
 
@@ -120,7 +116,8 @@ try {
         '--mode=universal',
         `--ks="${keystorePath}"`,
         `--ks-key-alias="${keystoreAlias}"`,
-        `--ks-pass="pass:${keystorePassword}"`
+        `--ks-pass="pass:${keystorePassword}"`,
+        `--key-pass="pass:${keystoreKeyPassword}"`
     ].join(' ');
 
     runCommand(bundletoolCommand);
@@ -166,4 +163,4 @@ try {
 } catch (error) {
     console.error('❌ Build failed:', error);
     process.exit(1);
-} 
+}

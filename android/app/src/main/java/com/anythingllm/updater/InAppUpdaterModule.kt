@@ -11,9 +11,11 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -24,10 +26,12 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.net.URL
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val activeCalls = ConcurrentHashMap.newKeySet<okhttp3.Call>()
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -35,6 +39,13 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
         .build()
 
     override fun getName() = "InAppUpdaterModule"
+
+    override fun invalidate() {
+        scope.cancel()
+        activeCalls.forEach { it.cancel() }
+        activeCalls.clear()
+        super.invalidate()
+    }
 
     @ReactMethod
     fun addListener(eventName: String) = Unit
@@ -68,6 +79,8 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
                     result.putString("status", "up_to_date")
                 }
                 promise.resolve(result)
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 promise.reject("UPDATE_CHECK_FAILED", error.message, error)
             }
@@ -102,6 +115,8 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
                     putString("status", "installer_opened")
                     putString("version", release.tag)
                 })
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 promise.reject("UPDATE_INSTALL_FAILED", error.message, error)
             }
@@ -116,7 +131,7 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
             .header("User-Agent", "Upgrade-AI-Android-Updater")
             .build()
 
-        httpClient.newCall(request).execute().use { response ->
+        executeTracked(request) { response ->
             if (response.code == 404) return null
             if (!response.isSuccessful) {
                 throw IOException("GitHub returned HTTP ${response.code}")
@@ -174,7 +189,7 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
 
         val digest = MessageDigest.getInstance("SHA-256")
         try {
-            httpClient.newCall(request).execute().use { response ->
+            executeTracked(request) { response ->
                 if (!response.isSuccessful) throw IOException("APK download failed with HTTP ${response.code}")
                 val finalUrl = response.request.url
                 if (finalUrl.scheme != "https" || finalUrl.host !in ALLOWED_DOWNLOAD_HOSTS) {
@@ -229,6 +244,16 @@ class InAppUpdaterModule(reactContext: ReactApplicationContext) : ReactContextBa
         }
         emitProgress(apkFile.length(), apkFile.length(), 100)
         return apkFile
+    }
+
+    private inline fun <T> executeTracked(request: Request, block: (okhttp3.Response) -> T): T {
+        val call = httpClient.newCall(request)
+        activeCalls.add(call)
+        try {
+            return call.execute().use(block)
+        } finally {
+            activeCalls.remove(call)
+        }
     }
 
     private fun validateDownloadedApk(apkFile: File) {

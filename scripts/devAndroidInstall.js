@@ -2,6 +2,7 @@ const { execSync } = require('child_process');
 const readline = require('readline');
 const os = require('os');
 const path = require('path');
+const { getAndroidBuildMetadata } = require('./androidBuildMetadata');
 
 // Create readline interface for user input
 const rl = readline.createInterface({
@@ -27,8 +28,7 @@ const gradleCommand = isWindows ? 'gradlew.bat' : './gradlew';
 // Dev installs reuse the release version number, so their sourcemap is kept apart from the
 // release one - it decodes `index.android.bundle:<line>:<col>` frames from this build only.
 const fs = require('fs');
-const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
-const versionCode = fs.readFileSync(path.join('android', 'app', 'build.gradle'), 'utf8').match(/versionCode\s+(\d+)/)[1];
+const { versionName: version, versionCode } = getAndroidBuildMetadata();
 const sourcemapFolder = path.join('sourcemaps', 'android', `v${version}-${versionCode}-dev`);
 fs.mkdirSync(sourcemapFolder, { recursive: true });
 const sourcemapPath = path.join(sourcemapFolder, 'index.android.bundle.map');
@@ -40,7 +40,7 @@ console.log(`Sourcemap saved to: ${sourcemapPath}`);
 
 // Build the Android app
 console.log('Building Android app...');
-executeCommand(`cd android && ${gradleCommand} assembleDebug`);
+executeCommand(`cd android && ${gradleCommand} assembleDebug -PUPGRADE_AI_VERSION_NAME=${version} -PUPGRADE_AI_VERSION_CODE=${versionCode}`);
 
 // Ask user to install the APK
 rl.question('Install the apk? (y/n): ', (answer) => {

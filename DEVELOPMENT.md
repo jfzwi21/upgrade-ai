@@ -46,14 +46,16 @@ than CPU on the devices we target, so please do not reintroduce them.
 
 ## Building for Release
 
-1. Place your `anythingllm-upload-key.keystore` in `android/app/`
+1. Place your `upgradeai-upload-key.keystore` in `android/app/` and use the `upgradeai-keystore` alias
 2. Set `APP_RELEASE_STORE_PASSWORD` and `APP_RELEASE_KEY_PASSWORD` environment variables
 3. Run `yarn build:android:release`
 4. Output will be in the `release/` folder
 
-Before cutting a release, bump the version in `package.json`, `.version` and `android/app/build.gradle`
-(`versionCode` and `versionName`) and add an entry to `src/utils/changelog.ts`. The in-app
-"What's new" modal looks up the entry that matches the installed `versionName`.
+Before cutting a release, keep the version in `package.json`, `.version`, Android's `versionName`,
+and iOS's `MARKETING_VERSION` in sync. Increase Android's `versionCode` (the tag build calculates it
+from the semantic version) and iOS's `CURRENT_PROJECT_VERSION`, then add an entry to
+`src/utils/changelog.ts`. The in-app "What's new" modal looks up the entry that matches the installed
+`versionName`.
 
 ## Technical Overview
 

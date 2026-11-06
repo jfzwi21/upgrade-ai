@@ -44,12 +44,24 @@ export function useOnboardingCompleted(): {
     const [loading, setLoading] = useState(true);
     const [onboardingCompleted, setOnboardingCompleted] = useState(false);
     useEffect(() => {
+        let active = true;
         // The last step, not the first: until it is recorded the onboarding screens must stay in the navigator,
         // or a relaunch mid-onboarding would land on Home with setup never finished.
-        repairPartialOnboarding()
+        void repairPartialOnboarding()
             .then(() => uiStore.getFromStorage('onboarding_data_handling_completed', false))
-            .then(isOnboardingCompleted => setOnboardingCompleted(isOnboardingCompleted))
-            .finally(() => setLoading(false));
+            .then(isOnboardingCompleted => {
+                if (active) setOnboardingCompleted(isOnboardingCompleted);
+            })
+            .catch(error => {
+                console.error('[Onboarding] could not read completion state', error);
+                if (active) setOnboardingCompleted(false);
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+        return () => {
+            active = false;
+        };
     }, []);
 
     useEffect(() => {

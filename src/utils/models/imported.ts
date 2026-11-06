@@ -5,13 +5,13 @@ import i18n from '@/i18n';
 /**
  * GGUF models the user added from Hugging Face (outside of our catalog).
  *
- * The model id is `org/repo/file.gguf` so several quants of the same repo can
+ * The model id is `org/repo/path/to/file.gguf` so several quants of the same repo can
  * live side by side. `LlamaRnWrapper.determineGgufFilePath` resolves ids that end
  * in `.gguf` straight to `models/gguf/<id>`, which is exactly where
  * `resolveDestinationPathFromGGUFUrl` puts the download, so no extra lookup is needed.
  */
 export type ImportedModel = {
-  /** `org/repo/file.gguf` */
+  /** `org/repo/path/to/file.gguf` */
   modelId: string;
   /** `org/repo` */
   repoId: string;
@@ -33,8 +33,15 @@ export type ImportedModel = {
 
 export const IMPORTED_MODELS_STORAGE_KEY = 'hf_imported_models' as const;
 
-export function importedModelId(repoId: string, filename: string) {
-  return `${repoId}/${filename}`;
+export function importedModelId(repoId: string, repoPath: string) {
+  const pathParts = repoPath.split('/');
+  if (
+    pathParts.length === 0 ||
+    pathParts.some(part => !part || part === '.' || part === '..' || part.includes('\\'))
+  ) {
+    throw new Error('Invalid Hugging Face model file path');
+  }
+  return `${repoId}/${pathParts.join('/')}`;
 }
 
 /**
@@ -55,7 +62,7 @@ export function buildImportedModel(repo: HfGGUFRepoSummary, quant: HfGGUFQuant):
   const quantLabel = quant.quant ? ` (${quant.quant})` : '';
 
   return {
-    modelId: importedModelId(repo.id, quant.filename),
+    modelId: importedModelId(repo.id, quant.path),
     repoId: repo.id,
     filename: quant.filename,
     quant: quant.quant,

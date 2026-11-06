@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Workspace, { WorkspaceType } from "@/database/models/Workspace";
 import uiStore from "@/store/UIStore";
 
@@ -6,26 +6,32 @@ export default function useWorkspace(wsSlug: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [workspace, setWorkspace] = useState<WorkspaceType>();
   const [error, setError] = useState<any>(null);
+  const requestId = useRef(0);
 
-  async function fetchWorkspace() {
+  const fetchWorkspace = useCallback(async () => {
+    const currentRequestId = ++requestId.current;
+    setIsLoading(true);
+    setError(null);
+    setWorkspace(undefined);
     try {
       if (!wsSlug) throw new Error('Workspace slug is required');
       const workspace = await Workspace.first([{ field: 'slug', value: wsSlug }]);
       if (!workspace) throw new Error('Workspace not found');
-      setWorkspace(workspace);
-      return { workspace };
+      if (requestId.current === currentRequestId) setWorkspace(workspace);
     } catch (error) {
       console.error('Error fetching workspaces', error);
-      setError(error);
-      return { workspace: null, thread: null };
+      if (requestId.current === currentRequestId) setError(error);
     } finally {
-      setIsLoading(false);
+      if (requestId.current === currentRequestId) setIsLoading(false);
     }
-  }
+  }, [wsSlug]);
 
   useEffect(() => {
-    fetchWorkspace();
-  }, [wsSlug]);
+    void fetchWorkspace();
+    return () => {
+      requestId.current += 1;
+    };
+  }, [fetchWorkspace]);
 
   useEffect(() => {
     const workspaceListener = uiStore.emitter.addListener(

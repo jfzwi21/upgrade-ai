@@ -17,7 +17,7 @@ export const PATHS = {
 
   connect_to_instance: 'ConnectToInstance',
 
-  remote_version_url: 'https://cdn.anythingllm.com/mobile/latest/version.txt',
-  google_play_store: 'https://play.google.com/store/apps/details?id=com.anythingllm',
-  github_new_issue: 'https://github.com/Mintplex-Labs/anythingllm-mobile/issues/new',
+  latest_release_api: 'https://api.github.com/repos/jfzwi21/upgrade-ai/releases/latest',
+  latest_release_page: 'https://github.com/jfzwi21/upgrade-ai/releases/latest',
+  github_new_issue: 'https://github.com/jfzwi21/upgrade-ai/issues/new',
 };

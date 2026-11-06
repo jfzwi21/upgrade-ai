@@ -284,7 +284,7 @@ export default function HuggingFaceImport({
         if (status.kind !== 'repo') return null;
 
         const { repo } = status.data;
-        const modelId = importedModelId(repo.id, item.quant.filename);
+        const modelId = importedModelId(repo.id, item.quant.path);
         const fit = memoryFitForSize(item.quant.size, memory);
         return (
           <QuantRow

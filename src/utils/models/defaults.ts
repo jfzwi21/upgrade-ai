@@ -90,13 +90,28 @@ export const EMBEDDING_MODEL = {
  * @returns The destination path for the model
  */
 export function resolveDestinationPathFromGGUFUrl(url: string) {
-    const splits = new URL(url).pathname.split('/');
-    const creator = {
-        creator: splits[1],
-        model: splits[2],
-        file: splits.slice(-1)[0],
+    const segments = new URL(url).pathname
+        .split('/')
+        .filter(Boolean)
+        .map(segment => decodeURIComponent(segment));
+    const resolveIndex = segments.indexOf('resolve');
+    const fileParts = resolveIndex >= 2
+        ? segments.slice(resolveIndex + 2)
+        : [segments[segments.length - 1]];
+
+    if (
+        segments.length < 3 ||
+        fileParts.length === 0 ||
+        !fileParts[fileParts.length - 1] ||
+        [...segments.slice(0, 2), ...fileParts].some(part =>
+            !part || part === '.' || part === '..' || part.includes('/') || part.includes('\\'),
+        )
+    ) {
+        throw new Error('Invalid GGUF download URL');
     }
-    return `${RNFS.DocumentDirectoryPath}/models/gguf/${creator.creator}/${creator.model}/${creator.file}`;
+
+    const [creator, model] = segments;
+    return `${RNFS.DocumentDirectoryPath}/models/gguf/${creator}/${model}/${fileParts.join('/')}`;
 }
 
 export default MODEL_CARDS;

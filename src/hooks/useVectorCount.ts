@@ -4,6 +4,7 @@ import Document from "@/database/models/Document";
 import AwaitableAlert from "@/components/AwaitableAlert";
 import { showToast } from "@/utils/Notification";
 import i18n from "@/i18n";
+import { invalidateIraqiKnowledgeIndex } from "@/utils/knowledge/indexIraqiKnowledge";
 
 export default function useVectorCount(workspaceSlug: string) {
     const [vectorCount, setVectorCount] = useState<number>(0);
@@ -14,8 +15,9 @@ export default function useVectorCount(workspaceSlug: string) {
     }, [workspaceSlug]);
 
     const resetVectorsForWorkspace = useCallback(async () => {
+        await invalidateIraqiKnowledgeIndex(workspaceSlug);
         await VectorDB.resetVectorsForWorkspace(workspaceSlug);
-        // Document.delete removes the processed text files no remaining document references
+        // Document.delete removes the processed text files no workspace document references
         await Document.delete([{ field: 'workspace_slug', value: workspaceSlug }]);
         setVectorCount(0);
     }, [workspaceSlug]);

@@ -1,11 +1,14 @@
 name: Build Upgrade AI APK
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
+    tags: ["v*"]
   workflow_dispatch:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -13,26 +16,98 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+          cache: "yarn"
       - name: Install Dependencies
-        run: yarn install
+        run: yarn install --frozen-lockfile --non-interactive
       - name: Bundle React Native JavaScript
         run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: "temurin"
+          java-version: "21"
       - name: Setup Gradle Cache
         uses: gradle/actions/setup-gradle@v4
+      - name: Prepare release version
+        id: release-version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import re
+          import sys
+
+          tag = os.environ['RELEASE_TAG']
+          version = tag[1:]
+          match = re.fullmatch(r'(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?', version)
+          if not match:
+              sys.exit(f"Release tag {tag!r} must use a semantic version such as v1.3.4 or v1.3.4-rc.1")
+
+          major, minor, patch = (int(match.group(i)) for i in range(1, 4))
+          prerelease = match.group(4)
+          if major > 209 or minor > 99 or patch > 999:
+              sys.exit('The Android versionCode range supports major <= 209, minor <= 99, and patch <= 999.')
+
+          # Reserve a versionCode band for each patch: alpha < beta < rc < other < stable.
+          # This keeps normal prerelease-to-stable upgrades installable by Android's package installer.
+          if prerelease:
+              identifiers = prerelease.lower().split('.')
+              channel = identifiers[0]
+              rank = 0 if channel in ('a', 'alpha') else 30 if channel in ('b', 'beta') else 60 if channel == 'rc' else 90
+              final_identifier = identifiers[-1]
+              ordinal = int(final_identifier) if final_identifier.isdigit() else 1
+              max_ordinal = 29 if rank < 90 else 8
+              if ordinal < 1 or ordinal > max_ordinal:
+                  sys.exit(f'A numeric prerelease suffix for this channel must be between 1 and {max_ordinal}.')
+              suffix = rank + ordinal
+          else:
+              suffix = 99
+
+          version_code = major * 10_000_000 + minor * 100_000 + patch * 100 + suffix
+          if version_code > 2_100_000_000:
+              sys.exit('The calculated Android versionCode exceeds the platform maximum.')
+          print(f'version-name={version}')
+          print(f'version-code={version_code}')
+          print(f'apk-name=UpgradeAI-{tag}-arm64.apk')
+          PY
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
       - name: Build Debug APK
+        env:
+          RELEASE_VERSION_NAME: ${{ steps.release-version.outputs.version-name }}
+          RELEASE_VERSION_CODE: ${{ steps.release-version.outputs.version-code }}
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
-      - name: Upload APK
+          if [[ -n "$RELEASE_VERSION_NAME" && -n "$RELEASE_VERSION_CODE" ]]; then
+            ./gradlew assembleDebug --no-daemon \
+              -PUPGRADE_AI_VERSION_NAME="$RELEASE_VERSION_NAME" \
+              -PUPGRADE_AI_VERSION_CODE="$RELEASE_VERSION_CODE"
+          else
+            ./gradlew assembleDebug --no-daemon
+          fi
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: UpgradeAI-Debug-APK
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Prepare APK for GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          APK_NAME: ${{ steps.release-version.outputs.apk-name }}
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk "$APK_NAME"
+      - name: Publish GitHub Release with APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_NAME: ${{ steps.release-version.outputs.apk-name }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$APK_NAME" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$APK_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

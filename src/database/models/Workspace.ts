@@ -2,6 +2,7 @@ import { field, json, lazy, text } from '@nozbe/watermelondb/decorators';
 import { database } from '@/database';
 import slugify from 'slugify';
 import { Q, Model } from '@nozbe/watermelondb';
+import { Platform } from 'react-native';
 import { generateUUID } from '@/utils/constants';
 import WorkspaceThread, { WorkspaceThreadType } from './WorkspaceThread';
 import Document from './Document';
@@ -12,6 +13,8 @@ import Telemetry from '@/utils/Telemetry';
 import { getDefaultContextLength } from '@/utils/contextLength';
 import i18n from '@/i18n';
 import { IRAQI_SYSTEM_INSTRUCTIONS } from '@/utils/assistant/iraqiPersona';
+import { ensureIraqiKnowledgeIndexed, invalidateIraqiKnowledgeIndex } from '@/utils/knowledge/indexIraqiKnowledge';
+import VectorDB from '@/utils/VectorDB';
 
 export type WorkspaceType = {
   name: string;
@@ -200,7 +203,9 @@ export default class Workspace extends Model {
   static async first(where: { field: string, value: string }[] = []): Promise<WorkspaceType | null> {
     const workspace = await this.get(where);
     if (!workspace || workspace.length === 0) return null;
-    return this.toWorkspaceObject(workspace[0]);
+    const result = this.toWorkspaceObject(workspace[0]);
+    void ensureIraqiKnowledgeIndexed(result);
+    return result;
   }
 
   /**
@@ -217,10 +222,13 @@ export default class Workspace extends Model {
         const threads = await workspace.threads.fetch().then((threads) => threads.map((thread) => WorkspaceThread.toWorkspaceThreadObject(thread)));
         return { ...this.toWorkspaceObject(workspace), threads };
       }));
+      workspacesWithThreads.forEach((workspace) => void ensureIraqiKnowledgeIndexed(workspace));
       return workspacesWithThreads;
     }
 
-    return workspaces.map((workspace) => this.toWorkspaceObject(workspace));
+    const results = workspaces.map((workspace) => this.toWorkspaceObject(workspace));
+    results.forEach((workspace) => void ensureIraqiKnowledgeIndexed(workspace));
+    return results;
   }
 
   /**
@@ -261,6 +269,7 @@ export default class Workspace extends Model {
     // Create a new thread for the workspace on creation
     Telemetry.logEvent(Telemetry.CUSTOM_EVENTS.ACTIONS.WORKSPACE_CREATED);
     const thread = await WorkspaceThread.create({ workspaceSlug: slug });
+    void ensureIraqiKnowledgeIndexed(newWorkspace);
     return {
       ...newWorkspace,
       threads: [thread],
@@ -315,8 +324,10 @@ export default class Workspace extends Model {
       // Threads cascade to their chats, which in turn remove the generated files they produced.
       // Documents cascade to their vectors and the processed text on disk.
       for (const wsSlug of workspaceSlugs) {
+        await invalidateIraqiKnowledgeIndex(wsSlug);
         await WorkspaceThread.delete([{ field: 'workspace_slug', value: wsSlug }]);
         await Document.delete([{ field: 'workspace_slug', value: wsSlug }], true);
+        if (Platform.OS === 'android') await VectorDB.resetVectorsForWorkspace(wsSlug);
       }
       await Memory.deleteForWorkspaces(workspaceSlugs);
 
@@ -359,6 +370,7 @@ export default class Workspace extends Model {
       });
     });
     newWorkspace = this.toWorkspaceObject(newWorkspace);
+    void ensureIraqiKnowledgeIndexed(newWorkspace);
     return newWorkspace;
   }
 }

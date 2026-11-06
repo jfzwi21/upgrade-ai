@@ -7,6 +7,7 @@ import { pick, isErrorWithCode, errorCodes } from '@react-native-documents/picke
 import { launchCamera, launchImageLibrary, type ImageLibraryOptions, type CameraOptions } from 'react-native-image-picker';
 import getEmbedder from "@/utils/Embedder";
 import VectorDB from "@/utils/VectorDB";
+import { invalidateIraqiKnowledgeIndex } from "@/utils/knowledge/indexIraqiKnowledge";
 import Document from "@/database/models/Document";
 import { showToast } from "@/utils/Notification";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -171,10 +172,11 @@ export default function useAttachments(wsSlug: string, threadSlug: string | null
      */
     const onClearWorkspaceVectors = useCallback(async () => {
         setAttachments([]);
+        await invalidateIraqiKnowledgeIndex(workspaceSlug);
         await VectorDB.resetVectorsForWorkspace(workspaceSlug);
         await Document.delete([{ field: 'workspace_slug', value: workspaceSlug }]);
         showToast(i18n.t('models.attachments.vectors_cleared'));
-    }, []);
+    }, [workspaceSlug]);
 
     const clearWorkspaceVectors = useCallback(async () => {
         Alert.alert(
@@ -183,7 +185,7 @@ export default function useAttachments(wsSlug: string, threadSlug: string | null
             { text: i18n.t('common.cancel'), style: 'cancel' },
             { text: i18n.t('common.clear'), style: 'destructive', onPress: onClearWorkspaceVectors }
         ]);
-    }, []);
+    }, [onClearWorkspaceVectors]);
 
     /**
      * Process an attachment and add it to the attachments array

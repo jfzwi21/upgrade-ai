@@ -706,6 +706,12 @@
       "status_assembling_one": "Deck wird zusammengestellt - {{count}} Folie",
       "status_assembling_other": "Deck wird zusammengestellt - {{count}} Folien"
     },
+    "motion_graphics": {
+      "name": "Bewegungsgrafiken",
+      "description": "Erstelle eine herunterladbare Remotion-React/TypeScript-Quelldatei für Bewegungsgrafiken mit einem strukturierten Storyboard, Voiceover, Animationshinweisen und Typografie. Dabei wird Quellcode erstellt, kein gerendertes Video.",
+      "status_generating": "Storyboard und Voiceover für \"{{topic}}\" werden erstellt",
+      "status_building": "Die Remotion-Szenendatei wird erstellt"
+    },
     "create_scheduled_job": {
       "name": "Geplanten Job erstellen",
       "description": "Lassen Sie den Assistenten einen wiederkehrenden Job aus der Unterhaltung einrichten, nachdem Sie ihn genehmigt haben.",

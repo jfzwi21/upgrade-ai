@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] セクション「{{title}}」完了 - {{count}}スライド（アウトラインから）",
       "status_assembling_other": "デッキを組み立て - {{count}}スライド"
     },
+    "motion_graphics": {
+      "name": "モーショングラフィックス",
+      "description": "ダウンロード可能なRemotionのReact/TypeScriptモーショングラフィックス用ソースファイルを、構成されたストーリーボード、ナレーション、アニメーション指示、タイポグラフィとともに作成します。これはソースコードであり、レンダリング済みの動画ではありません。",
+      "status_generating": "「{{topic}}」のストーリーボードとナレーションを生成しています",
+      "status_building": "Remotionのシーンファイルを作成しています"
+    },
     "create_scheduled_job": {
       "name": "スケジュール済みジョブを作成",
       "description": "アシスタントが承認後、会話からスケジュール済みジョブを設定することを許可します。",

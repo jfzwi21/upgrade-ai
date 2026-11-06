@@ -732,6 +732,12 @@
       "status_assembling_one": "Assemblage du deck - {{count}} diapositive",
       "status_assembling_other": "Assemblage du deck - {{count}} diapositives"
     },
+    "motion_graphics": {
+      "name": "Graphismes animés",
+      "description": "Créez un fichier source de graphisme animé téléchargeable avec Remotion, React et TypeScript, comprenant un storyboard structuré, une voix off, des indications d’animation et une mise en forme typographique. Il s’agit de code source, et non d’une vidéo rendue.",
+      "status_generating": "Génération du storyboard et de la voix off pour « {{topic}} »",
+      "status_building": "Création du fichier de scène Remotion"
+    },
     "create_scheduled_job": {
       "name": "Créer une tâche programmée",
       "description": "Laissez l'assistant configurer une tâche récurrente à partir de la conversation, après que vous l'ayez approuvée.",

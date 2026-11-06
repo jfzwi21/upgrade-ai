@@ -706,6 +706,12 @@
       "status_assembling_one": "Deck samenstellen - {{count}} dia",
       "status_assembling_other": "Deck samenstellen - {{count}} dia's"
     },
+    "motion_graphics": {
+      "name": "Motion Graphics",
+      "description": "Maak een downloadbaar Remotion React/TypeScript-bronbestand voor motion graphics, met een gestructureerd storyboard, voice-over, animatieaanwijzingen en typografie. Dit levert broncode op, geen gerenderde video.",
+      "status_generating": "Storyboard en voice-over genereren voor \"{{topic}}\"",
+      "status_building": "Remotion-scènebestand bouwen"
+    },
     "create_scheduled_job": {
       "name": "Geplande taak maken",
       "description": "Laat de assistent een terugkerende taak uit het gesprek instellen, nadat je deze hebt goedgekeurd.",

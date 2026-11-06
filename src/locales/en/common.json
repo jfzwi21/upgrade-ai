@@ -706,6 +706,12 @@
       "status_assembling_one": "Assembling deck - {{count}} slide",
       "status_assembling_other": "Assembling deck - {{count}} slides"
     },
+    "motion_graphics": {
+      "name": "Motion Graphics",
+      "description": "Create a downloadable Remotion React/TypeScript motion graphic source file with a structured storyboard, voiceover, animation cues, and typography. This creates source code, not a rendered video.",
+      "status_generating": "Generating storyboard and voiceover for \"{{topic}}\"",
+      "status_building": "Building the Remotion scene file"
+    },
     "create_scheduled_job": {
       "name": "Create Scheduled Job",
       "description": "Let the assistant set up a recurring job from the conversation, after you approve it.",

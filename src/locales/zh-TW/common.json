@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] 部分「{{title}}」完成 - {{count}} 張投影片 (來自大綱)",
       "status_assembling_other": "正在組合檔 - {{count}} 張投影片"
     },
+    "motion_graphics": {
+      "name": "動態圖像",
+      "description": "建立可下載的 Remotion React/TypeScript 動態圖像原始碼檔案，包含結構化分鏡、旁白、動畫提示與字體排版。此檔案是原始碼，不是算繪完成的影片。",
+      "status_generating": "正在為「{{topic}}」產生分鏡與旁白",
+      "status_building": "正在建置 Remotion 場景檔案"
+    },
     "create_scheduled_job": {
       "name": "建立排定工作",
       "description": "讓助手在您批准後從對話中設定定期工作。",

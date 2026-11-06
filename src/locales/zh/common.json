@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] 部分\"{{title}}\"完成 - {{count}} 张幻灯片（来自大纲）",
       "status_assembling_other": "组装演示文稿 - {{count}} 张幻灯片"
     },
+    "motion_graphics": {
+      "name": "动态图形",
+      "description": "创建可下载的 Remotion React/TypeScript 动态图形源文件，包含结构化分镜、旁白、动画提示和排版。此文件是源代码，不是渲染后的视频。",
+      "status_generating": "正在为“{{topic}}”生成分镜和旁白",
+      "status_building": "正在构建 Remotion 场景文件"
+    },
     "create_scheduled_job": {
       "name": "创建计划任务",
       "description": "在您批准后，让助手从对话中设置一个定期任务。",

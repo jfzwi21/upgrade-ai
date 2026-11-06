@@ -732,6 +732,12 @@
       "status_assembling_one": "Montando deck - {{count}} slide",
       "status_assembling_other": "Montando deck - {{count}} slides"
     },
+    "motion_graphics": {
+      "name": "Motion Graphics",
+      "description": "Crie um arquivo-fonte de motion graphics do Remotion com React/TypeScript, pronto para download, incluindo um storyboard estruturado, narração, indicações de animação e tipografia. O resultado é código-fonte, não um vídeo renderizado.",
+      "status_generating": "Gerando storyboard e narração para \"{{topic}}\"",
+      "status_building": "Criando o arquivo de cena do Remotion"
+    },
     "create_scheduled_job": {
       "name": "Criar Trabalho Agendado",
       "description": "Deixe o assistente configurar um trabalho recorrente da conversa, após sua aprovação.",

@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] 섹션 \"{{title}}\" 완료 - {{count}}개 슬라이드 (개요에서)",
       "status_assembling_other": "덱 조합 중 - {{count}}개 슬라이드"
     },
+    "motion_graphics": {
+      "name": "모션 그래픽",
+      "description": "구성된 스토리보드, 보이스오버, 애니메이션 큐, 타이포그래피가 포함된 다운로드 가능한 Remotion React/TypeScript 모션 그래픽 소스 파일을 만듭니다. 렌더링된 영상이 아니라 소스 코드를 생성합니다.",
+      "status_generating": "\"{{topic}}\"의 스토리보드와 보이스오버를 생성하는 중",
+      "status_building": "Remotion 장면 파일을 만드는 중"
+    },
     "create_scheduled_job": {
       "name": "예약된 작업 만들기",
       "description": "승인 후 대화에서 반복 작업을 설정하도록 어시스턴트를 도와줍니다.",

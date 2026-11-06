@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] Bagian \"{{title}}\" selesai - {{count}} slide (dari outline)",
       "status_assembling_other": "Merakit dek - {{count}} slide"
     },
+    "motion_graphics": {
+      "name": "Grafis Gerak",
+      "description": "Buat file sumber grafis gerak Remotion React/TypeScript yang dapat diunduh, lengkap dengan storyboard terstruktur, sulih suara, petunjuk animasi, dan tipografi. Ini menghasilkan kode sumber, bukan video yang telah dirender.",
+      "status_generating": "Membuat storyboard dan sulih suara untuk \"{{topic}}\"",
+      "status_building": "Membangun file adegan Remotion"
+    },
     "create_scheduled_job": {
       "name": "Buat Pekerjaan Terjadwal",
       "description": "Biarkan asisten mengatur pekerjaan berulang dari percakapan, setelah Anda menyetujuinya.",

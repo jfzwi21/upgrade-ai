@@ -732,6 +732,12 @@
       "status_assembling_one": "Ensamblando baraja - {{count}} diapositiva",
       "status_assembling_other": "Ensamblando baraja - {{count}} diapositivas"
     },
+    "motion_graphics": {
+      "name": "Gráficos en movimiento",
+      "description": "Crea un archivo fuente descargable de gráficos en movimiento con Remotion, React y TypeScript, que incluye un guion gráfico estructurado, voz en off, indicaciones de animación y tipografía. Se genera código fuente, no un video renderizado.",
+      "status_generating": "Generando el guion gráfico y la voz en off para «{{topic}}»",
+      "status_building": "Creando el archivo de escena de Remotion"
+    },
     "create_scheduled_job": {
       "name": "Crear trabajo programado",
       "description": "Deje que el asistente configure un trabajo recurrente desde la conversación, después de que lo apruebe.",

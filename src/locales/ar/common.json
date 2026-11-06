@@ -810,6 +810,12 @@
       "status_assembling_zero": "جارٍ تجميع العرض التقديمي - {{count}} شرائح",
       "status_assembling_other": "جارٍ تجميع العرض - {{count}} شرائح"
     },
+    "motion_graphics": {
+      "name": "رسوم متحركة",
+      "description": "أنشئ ملف مصدر Remotion بصيغة React/TypeScript قابلًا للتنزيل، مع مخطط مشاهد منظم وتعليق صوتي وإرشادات للحركة والطباعة. ينتج كودًا مصدريًا لا فيديو نهائيًا.",
+      "status_generating": "جارٍ إعداد مخطط المشاهد والتعليق الصوتي لـ «{{topic}}»",
+      "status_building": "جارٍ إنشاء ملف مشاهد Remotion"
+    },
     "create_scheduled_job": {
       "name": "إنشاء مهمة مجدولة",
       "description": "دع المساعد يُعدّ مهمة متكررة من المحادثة بعد موافقتك عليها.",

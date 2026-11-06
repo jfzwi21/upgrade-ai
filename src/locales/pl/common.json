@@ -758,6 +758,12 @@
       "status_assembling_one": "Montowanie talii - {{count}} slajd",
       "status_assembling_other": "Montowanie talii - {{count}} slajdów"
     },
+    "motion_graphics": {
+      "name": "Grafika ruchoma",
+      "description": "Utwórz plik źródłowy grafiki ruchomej Remotion w React/TypeScript do pobrania, zawierający uporządkowany storyboard, narrację lektorską, wskazówki dotyczące animacji i typografię. Powstaje kod źródłowy, a nie wyrenderowany film.",
+      "status_generating": "Generowanie storyboardu i narracji lektorskiej dla „{{topic}}”",
+      "status_building": "Tworzenie pliku sceny Remotion"
+    },
     "create_scheduled_job": {
       "name": "Utwórz zaplanowane zadanie",
       "description": "Pozwól asystentowi skonfigurować powtarzające się zadanie z rozmowy, po Twojej aprobacie.",

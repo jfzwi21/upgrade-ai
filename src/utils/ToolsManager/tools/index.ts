@@ -11,6 +11,7 @@ import createFiles from './createFiles';
 import createScheduledJob from './createScheduledJob';
 import setReminder from './setReminder';
 import termuxCommand from './termuxCommand';
+import motionGraphics from './motionGraphics';
 
 export default {
     default: {
@@ -21,6 +22,7 @@ export default {
         summarize,
         createScheduledJob,
         termuxCommand,
+        motionGraphics,
     },
     createFiles,
     appConnections: {

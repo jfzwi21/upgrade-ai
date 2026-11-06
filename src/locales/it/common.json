@@ -732,6 +732,12 @@
       "status_assembling_one": "Assemblaggio del deck - {{count}} diapositiva",
       "status_assembling_other": "Assemblaggio del deck - {{count}} diapositive"
     },
+    "motion_graphics": {
+      "name": "Grafica animata",
+      "description": "Crea un file sorgente scaricabile di grafica animata con Remotion, React e TypeScript, completo di storyboard strutturato, voce narrante, indicazioni per le animazioni e tipografia. Il risultato è codice sorgente, non un video renderizzato.",
+      "status_generating": "Generazione dello storyboard e della voce narrante per \"{{topic}}\"",
+      "status_building": "Creazione del file di scena Remotion"
+    },
     "create_scheduled_job": {
       "name": "Crea lavoro pianificato",
       "description": "Consenti all'assistente di configurare un lavoro ricorrente dalla conversazione, dopo che l'hai approvato.",

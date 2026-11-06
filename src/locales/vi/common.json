@@ -680,6 +680,12 @@
       "status_section_complete_from_outline_other": "[{{current}}/{{total}}] Phần \"{{title}}\" hoàn thành - {{count}} slide (từ phác thảo)",
       "status_assembling_other": "Đang lắp ráp bộ - {{count}} slide"
     },
+    "motion_graphics": {
+      "name": "Đồ họa chuyển động",
+      "description": "Tạo tệp mã nguồn đồ họa chuyển động Remotion dùng React/TypeScript để tải xuống, với kịch bản phân cảnh có cấu trúc, lời thuyết minh, chỉ dẫn hoạt ảnh và kiểu chữ. Đây là mã nguồn, không phải video đã kết xuất.",
+      "status_generating": "Đang tạo kịch bản phân cảnh và lời thuyết minh cho \"{{topic}}\"",
+      "status_building": "Đang tạo tệp cảnh Remotion"
+    },
     "create_scheduled_job": {
       "name": "Tạo công việc được lên lịch",
       "description": "Để trợ lý thiết lập một công việc định kỳ từ cuộc trò chuyện, sau khi bạn phê duyệt nó.",

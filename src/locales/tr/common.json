@@ -706,6 +706,12 @@
       "status_assembling_one": "Deste birleştiriliyor - {{count}} slayt",
       "status_assembling_other": "Deste birleştiriliyor - {{count}} slayt"
     },
+    "motion_graphics": {
+      "name": "Hareketli Grafikler",
+      "description": "Yapılandırılmış bir storyboard, seslendirme, animasyon yönergeleri ve tipografi içeren, indirilebilir bir Remotion React/TypeScript hareketli grafik kaynak dosyası oluşturun. Bu işlem, oluşturulmuş bir video değil, kaynak kodu üretir.",
+      "status_generating": "\"{{topic}}\" için storyboard ve seslendirme oluşturuluyor",
+      "status_building": "Remotion sahne dosyası oluşturuluyor"
+    },
     "create_scheduled_job": {
       "name": "Zamanlanmış İş Oluştur",
       "description": "Asistan'ın sizi onayladıktan sonra konuşmadan tekrarlayan bir iş kurup kurmasını sağlayın.",

@@ -16,6 +16,7 @@ import MemoryManager, { type PromptMemories } from "@/utils/Memories";
 import Document from "@/database/models/Document";
 import { estimateTokens, formatDocumentsBlock, type FullContextDocument } from "@/utils/documents/fullContext";
 import i18n from "@/i18n";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 interface BaseLLMProviderConfig {
   provider: string;
@@ -439,6 +440,7 @@ export default abstract class BaseOpenAILikeProvider {
    */
   async getContextTexts(userPrompt: string, onStatus?: (status: string) => void): Promise<SemanticSearchResult[]> {
     try {
+      if (SafeModeService.isEnabled()) return [];
       if (!this.workspace) throw new SilentError('No workspace attached to provider');
       if (userPrompt.length < 10) throw new SilentError('User prompt is too short to get context texts');
       const totalEmbeddings = await VectorDB.getWorkspaceVectorCount(this.workspace.slug);

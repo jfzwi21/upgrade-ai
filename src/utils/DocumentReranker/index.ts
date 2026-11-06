@@ -1,8 +1,9 @@
 import { RERANKER_MODEL, resolveDestinationPathFromGGUFUrl } from "@/utils/models/defaults";
 import * as RNFS from '@dr.pogodin/react-native-fs';
-import { initLlama, LlamaContext } from "llama.rn";
+import type { LlamaContext } from "llama.rn";
 import Telemetry from "@/utils/Telemetry";
 import type { SemanticSearchResult } from "@/utils/VectorDB";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 const LLAMA_POOLING_TYPE_RANK = 'rank' as const;
 
@@ -28,6 +29,7 @@ export default class DocumentReranker {
   }
 
   async isModelReady(): Promise<boolean> {
+    if (SafeModeService.isEnabled()) return false;
     return RNFS.exists(this.modelPath);
   }
 
@@ -49,6 +51,9 @@ export default class DocumentReranker {
     topK: number,
   ): Promise<(SemanticSearchResult & { rerankScore: number })[]> {
     if (results.length === 0) return [];
+    if (SafeModeService.isEnabled()) {
+      return results.slice(0, topK).map(result => ({ ...result, rerankScore: 1 - result.score }));
+    }
     if (results.length <= topK) {
       return results.map(r => ({ ...r, rerankScore: 1 - r.score }));
     }
@@ -63,7 +68,7 @@ export default class DocumentReranker {
       this.log(`Reranking ${results.length} chunks against query: "${query.slice(0, 80)}..."`);
       const startTime = Date.now();
 
-      context = await Telemetry.trackNativeModelLoad('reranker', this.modelPath, { n_ctx: 512 }, () => initLlama({
+      const loadedContext = await Telemetry.trackNativeModelLoad('reranker', this.modelPath, { n_ctx: 512 }, () => import('llama.rn').then(({ initLlama }) => initLlama({
         model: this.modelPath,
         embedding: true,
         pooling_type: LLAMA_POOLING_TYPE_RANK,
@@ -73,12 +78,13 @@ export default class DocumentReranker {
         use_mlock: true,
         use_mmap: true,
         n_gpu_layers: 0,
-      }));
+      })));
+      context = loadedContext;
 
       const documents = results.map(r =>
         String(r.metadata.content ?? '').slice(0, 512)
       );
-      const rerankResults = await context.rerank(query, documents);
+      const rerankResults = await loadedContext.rerank(query, documents);
       const elapsed = Date.now() - startTime;
 
       const scored = rerankResults.map(r => ({

@@ -195,6 +195,15 @@ class Telemetry {
         });
     }
 
+    private async recordRuntimeMemory(stage: string) {
+        try {
+            const { PerformanceSentinel } = await import('@/services/selfHealing/PerformanceSentinel');
+            await PerformanceSentinel.recordRuntimeMemory(stage);
+        } catch (error) {
+            console.warn('[Telemetry] Local runtime memory sample failed:', error);
+        }
+    }
+
     /**
      * Runs a llama.rn `initLlama` call and stamps Crashlytics custom keys around it. A SIGSEGV inside
      * llama.cpp has no JS stack, so these keys are the only record of which GGUF was loading when it died.
@@ -210,8 +219,13 @@ class Telemetry {
         details: Record<string, string | number | boolean>,
         load: () => Promise<T>,
     ): Promise<T> {
-        if (!this.enabled || !this.crashlytics) return load();
         const file = path.split('/').pop() || path;
+        await this.recordRuntimeMemory(`llama_${kind}_before`);
+        if (!this.enabled || !this.crashlytics) {
+            const result = await load();
+            await this.recordRuntimeMemory(`llama_${kind}_after`);
+            return result;
+        }
         const sizeMb = await RNFS.stat(path).then((s) => Math.round(Number(s.size) / (1024 * 1024))).catch(() => -1);
         const extra = Object.fromEntries(Object.entries(details).map(([key, value]) => [`llama_${kind}_${key}`, String(value)]));
         // Awaited so the keys reach the native SDK before the load can crash the process.
@@ -223,9 +237,11 @@ class Telemetry {
         });
         try {
             const result = await load();
+            await this.recordRuntimeMemory(`llama_${kind}_after`);
             this.setCrashContext(`llama ${kind}: loaded ${file}`, { [`llama_${kind}_state`]: 'loaded' });
             return result;
         } catch (error) {
+            await this.recordRuntimeMemory(`llama_${kind}_failed`);
             this.setCrashContext(`llama ${kind}: failed to load ${file}`, { [`llama_${kind}_state`]: 'failed' });
             throw error;
         }

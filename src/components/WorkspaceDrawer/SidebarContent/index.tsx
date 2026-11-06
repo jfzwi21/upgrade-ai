@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, TouchableOpacity, Text, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   DrawerContentScrollView,
@@ -15,12 +15,13 @@ import { BOTTOM_SHEET_NAMES, useBottomSheet } from '@/contexts/BottomSheetContex
 import { PATHS } from '@/utils/paths';
 import uiStore from '@/store/UIStore';
 import { useTranslation } from 'react-i18next';
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 export default function SidebarContent({ navigation }: { navigation: any }) {
   const { t } = useTranslation();
   const drawerStatus = useDrawerStatus();
   const { presentSheet, dismissAllSheets } = useBottomSheet();
-  const { loadingWorkspaces, workspaces, activeWorkspaceSlug, activeThreadSlug, fetchWorkspaces } = useWorkspaces(true);
+  const { loadingWorkspaces, workspaces, quarantinedWorkspaces, activeWorkspaceSlug, activeThreadSlug, fetchWorkspaces } = useWorkspaces(true);
   const { showNewWorkspaceModal, openNewWorkspaceModal, closeNewWorkspaceModal } = useNewWorkspaceModal();
   const [refreshing, setRefreshing] = useState(false);
   const unseenJobRuns = useUnreadScheduledJobRuns();
@@ -142,6 +143,31 @@ export default function SidebarContent({ navigation }: { navigation: any }) {
                   <Text className='text-[#C5AEB5] text-xs mt-0.5'>{t('model_explorer.drawer_subtitle')}</Text>
                 </View>
               </TouchableOpacity>
+              {quarantinedWorkspaces.length > 0 && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  onPress={() => Alert.alert(
+                    'إعادة إظهار المساحات المعزولة؟',
+                    'لم تُحذف بياناتها. إذا كان سبب العطل ما زال موجودًا فقد يتكرر؛ هل تريد المتابعة؟',
+                    [
+                      { text: 'إلغاء', style: 'cancel' },
+                      {
+                        text: 'إعادة الإظهار',
+                        onPress: () => {
+                          void Promise.all(
+                            quarantinedWorkspaces.map(workspace => SafeModeService.restoreWorkspace(workspace.slug)),
+                          );
+                        },
+                      },
+                    ],
+                  )}
+                  className="rounded-xl px-4 py-3 bg-[#27251B] border border-[#625A37]">
+                  <Text className="text-[#F3E9B0] text-sm">
+                    مساحات معزولة مؤقتًا ({quarantinedWorkspaces.length}) — إعادة إظهار
+                  </Text>
+                </TouchableOpacity>
+              )}
               {workspaces.map((ws) => (
                 <WorkspaceItem
                   key={ws.slug}

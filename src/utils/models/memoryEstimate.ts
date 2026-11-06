@@ -1,5 +1,3 @@
-import { addNativeLogListener, loadLlamaModelInfo, toggleNativeLog } from 'llama.rn';
-
 /**
  * Estimates how much RAM an on-device chat needs, per model, before anything is loaded.
  *
@@ -84,6 +82,7 @@ export function readGgufShape(path: string): Promise<GgufShape | null> {
   if (!shapeCache.has(path)) {
     shapeCache.set(path, (async () => {
       try {
+        const { loadLlamaModelInfo } = await import('llama.rn');
         const info = (await loadLlamaModelInfo(path)) as Record<string, unknown>;
         const arch = String(info['general.architecture'] || '');
         if (!arch) return null;
@@ -192,8 +191,10 @@ let allocationLoggingEnabled = false;
 export function enableAllocationLogging() {
   if (!__DEV__ || allocationLoggingEnabled) return;
   allocationLoggingEnabled = true;
-  toggleNativeLog(true).catch(() => { });
-  addNativeLogListener((_level, text) => {
-    if (/buffer size|KV self size|kv_cache.*size|llama_kv_cache/i.test(text)) console.log(`[LowMemory:native] ${text.trim()}`);
-  });
+  import('llama.rn').then(({ addNativeLogListener, toggleNativeLog }) => {
+    toggleNativeLog(true).catch(() => { });
+    addNativeLogListener((_level, text) => {
+      if (/buffer size|KV self size|kv_cache.*size|llama_kv_cache/i.test(text)) console.log(`[LowMemory:native] ${text.trim()}`);
+    });
+  }).catch(() => { });
 }

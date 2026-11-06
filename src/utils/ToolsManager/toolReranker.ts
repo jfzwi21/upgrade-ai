@@ -1,8 +1,9 @@
 import { RERANKER_MODEL, resolveDestinationPathFromGGUFUrl } from "@/utils/models/defaults";
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import { downloadFileAtomic } from "@/utils/fs/atomicDownload";
-import { initLlama, LlamaContext } from "llama.rn";
+import type { LlamaContext } from "llama.rn";
 import Telemetry from "@/utils/Telemetry";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 import NetInfo from "@react-native-community/netinfo";
 import { Alert } from "react-native";
 import i18n from "@/i18n";
@@ -78,6 +79,7 @@ export default class ToolReranker {
      * If the user is on cellular, prompts for confirmation before downloading.
      */
     async downloadModel(options?: { silent?: boolean }): Promise<boolean> {
+        if (SafeModeService.isEnabled()) return false;
         try {
             if (await RNFS.exists(this.modelPath)) return true;
 
@@ -148,7 +150,7 @@ export default class ToolReranker {
      */
     async rerank({ prompt, tools, topN, onStatus }: RerankerOptions): Promise<ToolDefinition[]> {
         const effectiveTopN = topN ?? ToolReranker.ON_DEVICE_THRESHOLD;
-        if (tools.length <= effectiveTopN) return tools;
+        if (SafeModeService.isEnabled() || tools.length <= effectiveTopN) return tools;
 
         let context: LlamaContext | null = null;
         try {
@@ -167,7 +169,7 @@ export default class ToolReranker {
             const startTime = Date.now();
 
             // Load the cross-encoder into a temporary context
-            context = await Telemetry.trackNativeModelLoad('tool_reranker', this.modelPath, { n_ctx: 512 }, () => initLlama({
+            const loadedContext = await Telemetry.trackNativeModelLoad('tool_reranker', this.modelPath, { n_ctx: 512 }, () => import('llama.rn').then(({ initLlama }) => initLlama({
                 model: this.modelPath,
                 embedding: true,
                 pooling_type: LLAMA_POOLING_TYPE_RANK,
@@ -177,14 +179,15 @@ export default class ToolReranker {
                 use_mlock: true,
                 use_mmap: true,
                 n_gpu_layers: 0,
-            }));
+            })));
+            context = loadedContext;
 
             // Build documents from tool definitions
             const documents = tools.map((tool) => this.toolToDocument(tool));
             this.log('Tool documents:', documents.map((d, i) => `[${i}] ${d.slice(0, 80)}`));
 
             // Run cross-encoder reranking
-            const rerankResults = await context.rerank(prompt, documents);
+            const rerankResults = await loadedContext.rerank(prompt, documents);
             const loadAndRankMs = Date.now() - startTime;
 
             // Sort by score descending and take top-N

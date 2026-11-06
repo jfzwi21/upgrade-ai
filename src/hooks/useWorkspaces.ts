@@ -3,6 +3,7 @@ import { NativeEventEmitter } from "react-native";
 import Workspace from "@/database/models/Workspace";
 import uiStore from "@/store/UIStore";
 import { ACTIVE_CHAT_LOCATION_KEY } from "./useChatInfoEmit";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 const eventEmitter = new NativeEventEmitter();
 
@@ -15,6 +16,9 @@ function currentChatLocation(): { wsSlug: string | null, threadSlug: string | nu
 export default function useWorkspaces(withThreads: boolean = false) {
   const [isLoading, setIsLoading] = useState(false);
   const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [quarantinedSlugs, setQuarantinedSlugs] = useState<string[]>(
+    SafeModeService.getSnapshot().quarantinedWorkspaceSlugs,
+  );
   // Seed from the open chat so a sidebar that mounts after the chat screen still knows where we are.
   const [activeWorkspaceSlug, setActiveWorkspaceSlug] = useState<string | null>(() => currentChatLocation().wsSlug);
   const [activeThreadSlug, setActiveThreadSlug] = useState<string | null>(() => currentChatLocation().threadSlug);
@@ -32,6 +36,13 @@ export default function useWorkspaces(withThreads: boolean = false) {
       setIsLoading(false);
     }
   }
+
+  useEffect(() => {
+    const unsubscribe = SafeModeService.subscribe(snapshot => {
+      setQuarantinedSlugs(snapshot.quarantinedWorkspaceSlugs);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const workspaceListener = eventEmitter.addListener(
@@ -144,5 +155,17 @@ export default function useWorkspaces(withThreads: boolean = false) {
     return () => sub.remove();
   }, []);
 
-  return { loadingWorkspaces: isLoading, workspaces, activeWorkspaceSlug, setActiveWorkspaceSlug, activeThreadSlug, fetchWorkspaces };
+  const quarantinedSet = new Set(quarantinedSlugs);
+  const visibleWorkspaces = workspaces.filter(workspace => !quarantinedSet.has(workspace.slug));
+  const quarantinedWorkspaces = workspaces.filter(workspace => quarantinedSet.has(workspace.slug));
+
+  return {
+    loadingWorkspaces: isLoading,
+    workspaces: visibleWorkspaces,
+    quarantinedWorkspaces,
+    activeWorkspaceSlug,
+    setActiveWorkspaceSlug,
+    activeThreadSlug,
+    fetchWorkspaces,
+  };
 }

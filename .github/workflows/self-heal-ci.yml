@@ -1,0 +1,106 @@
+name: Self-heal CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: self-heal-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify app and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Prepare log artifact
+        run: |
+          mkdir -p self-heal-artifacts
+          printf 'Verification has not started yet.\n' > self-heal-artifacts/verification.log
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --non-interactive
+
+      - name: Run checks and save complete logs
+        id: checks
+        shell: bash
+        run: |
+          set +e
+          mkdir -p self-heal-artifacts
+          report=self-heal-artifacts/verification.log
+          failed=0
+          run_check() {
+            label="$1"
+            shift
+            printf '\n===== %s =====\n' "$label" | tee -a "$report"
+            "$@" 2>&1 | tee -a "$report"
+            status=${PIPESTATUS[0]}
+            printf '\n[exit=%s] %s\n' "$status" "$label" | tee -a "$report"
+            if [ "$status" -ne 0 ]; then failed=1; fi
+          }
+          run_check 'Jest' yarn jest --runInBand
+          run_check 'TypeScript' yarn typecheck
+          run_check 'ESLint' yarn lint
+          run_check 'Android debug build' bash ./android/gradlew -p android :app:assembleDebug --no-daemon
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          exit "$failed"
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-heal-verification-log
+          path: self-heal-artifacts/verification.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  diagnose:
+    name: Produce a reviewable recovery report
+    needs: verify
+    if: always() && needs.verify.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out trusted base diagnostics
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+
+      - name: Download failed-check log
+        uses: actions/download-artifact@v4
+        with:
+          name: self-heal-verification-log
+          path: self-heal-artifacts
+
+      - name: Analyze failure patterns and suggest next checks
+        run: python3 scripts/self-heal/diagnose-ci-log.py self-heal-artifacts/verification.log self-heal-artifacts/self-heal-diagnosis.md
+
+      - name: Upload recovery report and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-heal-diagnosis
+          path: self-heal-artifacts/
+          retention-days: 14

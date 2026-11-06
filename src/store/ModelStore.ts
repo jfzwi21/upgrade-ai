@@ -13,7 +13,8 @@ import { makePersistable } from 'mobx-persist-store';
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import { computed, makeAutoObservable, runInAction } from 'mobx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LlamaContext, initLlama } from 'llama.rn';
+import type { LlamaContext } from 'llama.rn';
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 import { CompletionParams } from '@/utils/chat/completionTypes';
 import { fetchModelFilesDetails } from '@/utils/api/hf';
 // import { chatSessionStore } from '@/store/ChatSessionStore';
@@ -365,7 +366,7 @@ class ModelStore {
       this.appState.match(/inactive|background/) &&
       nextAppState === 'active'
     ) {
-      if (this.useAutoRelease) {
+      if (this.useAutoRelease && !SafeModeService.isEnabled()) {
         await this.reinitializeContext();
       }
     } else if (
@@ -383,6 +384,7 @@ class ModelStore {
   };
 
   reinitializeContext = async () => {
+    if (SafeModeService.isEnabled()) return;
     if (this.activeModelId) {
       const model = this.models.find(m => m.id === this.activeModelId);
       if (model) {
@@ -616,6 +618,9 @@ class ModelStore {
   };
 
   initContext = async (model: Model) => {
+    if (SafeModeService.isEnabled()) {
+      throw new Error('On-device models are paused while Safe Mode is active.');
+    }
     await this.releaseContext();
     const filePath = await this.getModelFullPath(model);
     if (!filePath) {
@@ -638,6 +643,7 @@ class ModelStore {
         n_gpu_layers: this.useMetal ? this.n_gpu_layers : 0,
         no_gpu_devices: !this.useMetal,
       };
+      const { initLlama } = await import('llama.rn');
       const ctx = await initLlama(
         {
           model: filePath,

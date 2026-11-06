@@ -1,9 +1,8 @@
-import {
-  initLlama,
+import type {
   LlamaContext,
-  type CompletionParams,
-  type NativeCompletionResult,
-  type TokenData,
+  CompletionParams,
+  NativeCompletionResult,
+  TokenData,
 } from 'llama.rn';
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import { Model } from '@/utils/types';
@@ -17,6 +16,7 @@ import ContextCompactor, { type CompactionChatMessage, truncateMiddle } from '@/
 import { throwIfAborted } from '@/utils/chat/abort';
 import { ChatMemoryEstimate, enableAllocationLogging, estimateChatMemory, readGgufShape } from '@/utils/models/memoryEstimate';
 import Telemetry from '@/utils/Telemetry';
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 export type NativeLlamaChatMessage = {
   role: string;
@@ -325,6 +325,9 @@ export default class LlamaRnWrapper {
    * callers share the same in-flight load.
    */
   async initialize(): Promise<boolean> {
+    if (SafeModeService.isEnabled()) {
+      throw new Error('On-device inference is paused while Safe Mode is active.');
+    }
     if (this.context) return true;
     if (this.initializing) return this.initializing;
 
@@ -400,10 +403,13 @@ export default class LlamaRnWrapper {
   }
 
   private async createContext({ multimodal }: { multimodal: boolean }) {
+    if (SafeModeService.isEnabled()) {
+      throw new Error('On-device inference is paused while Safe Mode is active.');
+    }
     const nCtx = this.contextLength;
     enableAllocationLogging(); // TODO: remove before release - see memoryEstimate.ts
     const details = { source: this.modelDefinition ? 'catalog' : 'imported', model_id: this.model, n_ctx: nCtx, multimodal };
-    return Telemetry.trackNativeModelLoad('chat', this.ggufFilePath!, details, () => initLlama({
+    return Telemetry.trackNativeModelLoad('chat', this.ggufFilePath!, details, () => import('llama.rn').then(({ initLlama }) => initLlama({
       model: this.ggufFilePath!,
       n_ctx: nCtx,
       n_batch: Math.min(LlamaRnWrapper.N_BATCH, nCtx),
@@ -418,7 +424,7 @@ export default class LlamaRnWrapper {
       // than the CPU path on the phones we target, so we never offload layers.
       n_gpu_layers: 0,
       ...(this.modelDefinition?.chatTemplateString ? { chat_template: this.modelDefinition.chatTemplateString } : {}),
-    }));
+    })));
   }
 
   /**

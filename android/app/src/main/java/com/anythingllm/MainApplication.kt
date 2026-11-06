@@ -1,6 +1,10 @@
 package com.anythingllm
 
 import android.app.Application
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -26,6 +30,7 @@ import com.anythingllm.alarms.AlarmPackage
 import com.anythingllm.loopbackauth.LoopbackAuthPackage
 import com.anythingllm.termux.TermuxBridgePackage
 import com.anythingllm.updater.InAppUpdaterPackage
+import com.anythingllm.startuptiming.StartupTimingPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -52,6 +57,7 @@ class MainApplication : Application(), ReactApplication {
             LoopbackAuthPackage(),
             TermuxBridgePackage(),
             InAppUpdaterPackage(),
+            StartupTimingPackage(),
           )
 
           manuallyRegisteredPackages.forEach { packageInstance ->
@@ -75,10 +81,17 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    processStartElapsedMs = SystemClock.elapsedRealtime()
+    // The isolated crash-recovery activity must stay lightweight and must not boot React Native.
+    if (isCrashRecoveryProcess()) return
     CaocConfig.Builder.create()
       .enabled(true)
-      .showErrorDetails(true)
-      .showRestartButton(true)
+      .showErrorDetails(false)
+      .showRestartButton(false)
+      .logErrorOnRestart(false)
+      .minTimeBetweenCrashesMs(3000)
+      .restartActivity(MainActivity::class.java)
+      .errorActivity(CrashRecoveryActivity::class.java)
       .apply()
     CustomActivityOnCrash.install(this)
     try {
@@ -89,7 +102,22 @@ class MainApplication : Application(), ReactApplication {
     }
   }
 
-  private companion object {
-    const val TAG = "MainApplication"
+  private fun isCrashRecoveryProcess(): Boolean {
+    val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      Application.getProcessName()
+    } else {
+      val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+      activityManager?.runningAppProcesses
+        ?.firstOrNull { it.pid == android.os.Process.myPid() }
+        ?.processName
+    }
+    return processName?.endsWith(":error_activity") == true
+  }
+
+  companion object {
+    private const val TAG = "MainApplication"
+    @Volatile
+    @JvmField
+    var processStartElapsedMs: Long = 0L
   }
 }

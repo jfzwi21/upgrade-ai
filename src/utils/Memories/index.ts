@@ -5,6 +5,7 @@ import OnDeviceEmbedderProvider from '@/utils/Embedder/onDevice';
 import DocumentReranker from '@/utils/DocumentReranker';
 import Telemetry from '@/utils/Telemetry';
 import i18n from '@/i18n';
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 import {
   cosineSimilarity,
   fitScoredMemories,
@@ -126,6 +127,7 @@ export default class MemoryManager {
    * must never kick off an 84MB download - retrieval backfills missing vectors when it needs them.
    */
   private static async embedIfCheap(memory: MemoryType): Promise<void> {
+    if (SafeModeService.isEnabled()) return;
     if (!(await OnDeviceEmbedderProvider.isModelDownloaded())) {
       this.log(`embedder not downloaded - memory ${memory.uuid} will be embedded on first use`);
       return;
@@ -184,6 +186,7 @@ export default class MemoryManager {
     onStatus?: (status: string) => void;
   }): Promise<PromptMemories> {
     try {
+      if (SafeModeService.isEnabled()) return EMPTY_PROMPT_MEMORIES;
       if (!(await this.isEnabled())) return EMPTY_PROMPT_MEMORIES;
       const { global, workspace } = await Memory.forWorkspace(workspaceSlug);
       if (!global.length && !workspace.length) return EMPTY_PROMPT_MEMORIES;

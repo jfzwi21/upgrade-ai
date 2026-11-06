@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import getEmbedder from "@/utils/Embedder";
 import VectorDB from "@/utils/VectorDB";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 import { IRAQI_KNOWLEDGE, IRAQI_KNOWLEDGE_VERSION } from "./iraqiKnowledge";
 
 type IraqiWorkspace = {
@@ -54,6 +55,7 @@ export function ensureIraqiKnowledgeIndexed(
   workspace: IraqiWorkspace,
 ): Promise<boolean> {
   if (
+    SafeModeService.isEnabled() ||
     Platform.OS !== "android" ||
     !workspace.slug ||
     !isIraqiWorkspace(workspace)

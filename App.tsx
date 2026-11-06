@@ -2,7 +2,7 @@ import * as React from 'react';
 import { observer } from 'mobx-react';
 import { NavigationContainer } from '@react-navigation/native';
 import { ActivityIndicator, Provider as PaperProvider } from 'react-native-paper';
-import { AppState, StatusBar, StyleSheet, View } from 'react-native';
+import { AppState, StatusBar, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -31,14 +31,60 @@ import { useScheduledJobsTicker } from '@/utils/ScheduledJobs/scheduler';
 import { useSharedContentNavigation } from '@/utils/SharedContent';
 import { useDeepLinkNavigation } from '@/utils/DeepLinks';
 import HighlightsHost from '@/components/Highlights/HighlightsHost';
-import ErrorBoundary, { RootErrorFallback } from '@/components/ErrorBoundary';
+import SelfHealingErrorBoundary from '@/components/SelfHealingErrorBoundary';
+import { SafeModeService, type StorageHealth } from '@/services/selfHealing/SafeModeService';
+import { watchdogService } from '@/services/selfHealing/WatchdogService';
 import { hydrateLanguage } from '@/i18n';
 import HFHubService from '@/services/HFHubService';
 import UpgradeIntro from '@/components/UpgradeIntro';
 import Telemetry from '@/utils/Telemetry';
+import { PerformanceSentinel } from '@/services/selfHealing/PerformanceSentinel';
+import { storageIntegrityHealer } from '@/services/selfHealing/StorageIntegrityHealer';
 
 const Drawer = createDrawerNavigator();
+function SafeModeBanner({ storageHealth }: { storageHealth: StorageHealth }) {
+  const message =
+    storageHealth === 'healthy'
+      ? 'تم تفعيل وضع التعافي — تم فحص وتأمين بياناتك بنجاح.'
+      : storageHealth === 'corrupt'
+        ? 'تم تفعيل وضع التعافي — اكتُشف خلل في قاعدة البيانات؛ لم تُحذف بياناتك.'
+        : storageHealth === 'not_present'
+          ? 'تم تفعيل وضع التعافي — لا توجد قاعدة بيانات سابقة لفحصها.'
+          : storageHealth === 'not_checked'
+            ? 'تم تفعيل وضع التعافي — جارٍ فحص قاعدة البيانات دون تعديل بياناتك.'
+            : 'تم تفعيل وضع التعافي — تعذّر فحص قاعدة البيانات، ولم تُعدّل بياناتك.';
+  return (
+    <View
+      accessibilityRole="summary"
+      accessibilityLiveRegion="polite"
+      style={{ backgroundColor: '#1B3035', borderBottomColor: '#35565C', borderBottomWidth: 1, paddingHorizontal: 16, paddingVertical: 9 }}>
+      <Text style={{ color: '#E6F4F1', fontSize: 13, textAlign: 'center' }}>{message}</Text>
+    </View>
+  );
+}
+
 const App = observer(() => {
+  const [safeModeState, setSafeModeState] = React.useState(SafeModeService.getSnapshot());
+  const safeMode = safeModeState.enabled;
+  React.useEffect(() => SafeModeService.subscribe(setSafeModeState), []);
+
+  React.useEffect(() => PerformanceSentinel.install(), []);
+  React.useEffect(() => {
+    if (safeMode) {
+      PerformanceSentinel.enterSafeMode().catch(error => {
+        console.warn('[App] Safe Mode cache cleanup failed:', error);
+      });
+      if (safeModeState.storageHealth === 'not_checked') {
+        storageIntegrityHealer.checkAndRepair().then(report => {
+          SafeModeService.setStorageHealth(report.health);
+        }).catch(error => {
+          console.warn('[App] Safe Mode database check failed:', error);
+          SafeModeService.setStorageHealth('unavailable');
+        });
+      }
+    }
+  }, [safeMode, safeModeState.storageHealth]);
+
   // Firebase is optional for rendering and must not initialize before the first UI commit.
   React.useEffect(() => {
     Telemetry.initialize().catch(error => {
@@ -52,7 +98,7 @@ const App = observer(() => {
   // anythingllm:// links, eg. Hugging Face "Use this model" opening the on-device model picker.
   useDeepLinkNavigation();
   // Runs due scheduled jobs while the app is open and keeps the background wake-up armed.
-  useScheduledJobsTicker();
+  useScheduledJobsTicker(!safeMode);
   const theme = useTheme();
   const styles = rootStyles(theme);
   const { initialRoute, isLoading } = useInitialRoute();
@@ -61,6 +107,13 @@ const App = observer(() => {
   const [languageReady, setLanguageReady] = React.useState(false);
   React.useEffect(() => { hydrateLanguage().finally(() => setLanguageReady(true)); }, []);
   const [introSeen, setIntroSeen] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    if (!isLoading && !loadingOnboardingCompleted && languageReady && introSeen !== null) {
+      PerformanceSentinel.recordStartupStage('app_interactive').catch(error => {
+        console.warn('[App] Startup memory sample failed:', error);
+      });
+    }
+  }, [isLoading, loadingOnboardingCompleted, languageReady, introSeen]);
   React.useEffect(() => {
     let active = true;
     AsyncStorage.getItem('upgrade-ai-intro-seen-v1')
@@ -78,7 +131,7 @@ const App = observer(() => {
     });
   }, []);
   React.useEffect(() => {
-    if (!languageReady) return;
+    if (!languageReady || safeMode) return;
     const refreshWeeklyModels = () => {
       HFHubService.getWeeklyTrendingModels().catch(error => {
         console.warn('[App] Weekly Hugging Face model refresh failed:', error);
@@ -90,9 +143,11 @@ const App = observer(() => {
       if (state === 'active') refreshWeeklyModels();
     });
     return () => subscription.remove();
-  }, [languageReady]);
+  }, [languageReady, safeMode]);
   // Sweep processed text, generated documents and picker temp files nothing references anymore.
-  React.useEffect(() => { purgeOrphanedFiles(); }, []);
+  React.useEffect(() => {
+    if (!safeMode) purgeOrphanedFiles();
+  }, [safeMode]);
   // Once onboarding completes its screens are removed from the drawer, but initialRoute was
   // resolved at launch and may still name one of them. React Navigation 7 throws on an unknown
   // initialRouteName (v6 ignored it), so fall back to Home in that case.
@@ -101,7 +156,7 @@ const App = observer(() => {
   const [recoveredFromError, setRecoveredFromError] = React.useState(false);
   const drawerInitialRoute =
     onboardingCompleted &&
-    (recoveredFromError || Object.values(PATHS.onboarding).includes(initialRoute.path))
+      (recoveredFromError || Object.values(PATHS.onboarding).includes(initialRoute.path))
       ? PATHS.home
       : initialRoute.path;
 
@@ -125,7 +180,8 @@ const App = observer(() => {
   return (
     <View style={{ flex: 1 }}>
       <BottomSheetProvider>
-        <Suspense fallback={<ActivityIndicator />}>
+      {safeMode && <SafeModeBanner storageHealth={safeModeState.storageHealth} />}
+      <Suspense fallback={<ActivityIndicator />}>
         <GestureHandlerRootView style={styles.root}>
           <SafeAreaProvider>
             <StatusBar barStyle='default' backgroundColor="transparent" translucent />
@@ -139,10 +195,27 @@ const App = observer(() => {
               its values; keyboard height comes from RN's Keyboard events instead.
             */}
             {/* Any render error below shows an error screen instead of closing the app */}
-            <ErrorBoundary
-              name="root"
-              fallback={(props) => <RootErrorFallback {...props} />}
-              onReset={() => setRecoveredFromError(true)}>
+            <SelfHealingErrorBoundary
+              onReset={() => setRecoveredFromError(true)}
+              onError={error => {
+                SafeModeService.setEnabled(true);
+                watchdogService.markStartupFailed().catch(watchdogError => {
+                  console.warn('[App] Could not record startup failure:', watchdogError);
+                });
+                const route = navigationRef.getCurrentRoute();
+                if (route?.name === PATHS.workspace_chat) {
+                  const params = route.params as { wsSlug?: string; workspaceSlug?: string } | undefined;
+                  const workspaceSlug = params?.wsSlug ?? params?.workspaceSlug;
+                  if (workspaceSlug) {
+                    SafeModeService.quarantineWorkspace(
+                      workspaceSlug,
+                      `${error.name}: ${error.message}`,
+                    ).catch(quarantineError => {
+                      console.warn('[App] Could not quarantine workspace:', quarantineError);
+                    });
+                  }
+                }
+              }}>
               <PaperProvider theme={theme}>
                 <LLMPreferenceProvider>
                   <BottomSheetModalProvider>
@@ -261,7 +334,7 @@ const App = observer(() => {
                   </BottomSheetModalProvider>
                 </LLMPreferenceProvider>
               </PaperProvider>
-            </ErrorBoundary>
+            </SelfHealingErrorBoundary>
           </SafeAreaProvider>
         </GestureHandlerRootView>
         </Suspense>

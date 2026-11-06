@@ -17,6 +17,8 @@ interface ErrorBoundaryProps {
   fallback: (props: ErrorFallbackProps) => ReactNode;
   /** Called when the fallback resets the boundary, before the children are rendered again */
   onReset?: () => void;
+  /** Receives the thrown error and React component stack for local recovery decisions. */
+  onError?: (error: Error, info: ErrorInfo) => void;
   children: ReactNode;
 }
 
@@ -38,7 +40,16 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, { error
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(
+      `[ErrorBoundary:${this.props.name}] ${error.name}: ${error.message}\nComponent stack:${info.componentStack ?? ''}`,
+      error,
+    );
     telemetry.recordError(error, `[ErrorBoundary:${this.props.name}] component stack:${info.componentStack ?? ''}`);
+    try {
+      this.props.onError?.(error, info);
+    } catch (handlerError) {
+      console.warn(`[ErrorBoundary:${this.props.name}] recovery callback failed:`, handlerError);
+    }
   }
 
   reset = () => {

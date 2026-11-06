@@ -2,8 +2,9 @@ import { EMBEDDING_MODEL, resolveDestinationPathFromGGUFUrl } from "@/utils/mode
 import TextSplitter, { TextSplitterConfig } from "@/utils/TextSplitter";
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import { downloadFileAtomic } from "@/utils/fs/atomicDownload";
-import { initLlama, LlamaContext, NativeEmbeddingResult } from "llama.rn";
+import type { LlamaContext, NativeEmbeddingResult } from "llama.rn";
 import Telemetry from "@/utils/Telemetry";
+import { SafeModeService } from '@/services/selfHealing/SafeModeService';
 
 type EmbedderPrefixType = 'query' | 'embed_document';
 
@@ -107,13 +108,14 @@ export default class OnDeviceEmbedderProvider {
      * so a burst of chunks never creates more than one context.
      */
     private async initialize(): Promise<boolean> {
+        if (SafeModeService.isEnabled()) throw new Error('Local embeddings are paused while Safe Mode is active.');
         if (this.context) return true;
         if (this.initializing) return this.initializing;
 
         this.initializing = (async () => {
             try {
                 if (!(await RNFS.exists(this.modelPath))) await this.downloadModel();
-                this.context = await Telemetry.trackNativeModelLoad('embedder', this.modelPath, { n_ctx: this.CONTEXT_LENGTH }, () => initLlama({
+                this.context = await Telemetry.trackNativeModelLoad('embedder', this.modelPath, { n_ctx: this.CONTEXT_LENGTH }, () => import('llama.rn').then(({ initLlama }) => initLlama({
                     model: this.modelPath,
                     embedding: true,
                     embd_normalize: this.EMBEDDING_NORMALIZATION,
@@ -123,7 +125,7 @@ export default class OnDeviceEmbedderProvider {
                     use_mlock: true,
                     use_mmap: true,
                     n_gpu_layers: 0, // CPU only
-                }));
+                })));
                 this.log(`${this.model} loaded`);
                 return true;
             } catch (error) {
@@ -207,6 +209,7 @@ export default class OnDeviceEmbedderProvider {
      * @returns The embedding.
      */
     async embed(text: string, as: 'query' | 'embed_document' = 'query') {
+        if (SafeModeService.isEnabled()) throw new Error('Local embeddings are paused while Safe Mode is active.');
         return this.wrapInKeepAlive(() => this.runExclusive(async () => {
             await this.initialize();
             if (!this.context) throw new Error('OnDeviceEmbedderProvider::embed: could not initialize');

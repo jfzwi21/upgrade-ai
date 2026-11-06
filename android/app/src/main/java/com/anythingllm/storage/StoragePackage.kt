@@ -9,7 +9,7 @@ import com.facebook.react.uimanager.ViewManager
 
 class StoragePackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return listOf(StorageModule(reactContext))
+        return listOf(StorageModule(reactContext), StorageIntegrityModule(reactContext))
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<View, ReactShadowNode<*>>> {

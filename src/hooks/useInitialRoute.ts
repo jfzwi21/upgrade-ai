@@ -3,6 +3,7 @@ import uiStore from "@/store/UIStore";
 import { useState, useEffect } from "react";
 import { resolveDefaultChatRoute } from "@/utils/defaultChatRoute";
 import { repairPartialOnboarding } from "@/hooks/useOnboardingHook";
+import { SafeModeService } from "@/services/selfHealing/SafeModeService";
 
 const DEFAULT_INITIAL_ROUTE = PATHS.home;
 
@@ -46,6 +47,14 @@ export default function useInitialRoute(): { initialRoute: InitialRoute, isLoadi
       // If the user is not onboarded, we need to redirect them to the onboarding flow
       if (staticRoute !== DEFAULT_INITIAL_ROUTE) {
         setInitialRoute({ path: staticRoute, params: {} });
+        setIsLoading(false);
+        return;
+      }
+
+      // A crash-loop launch must not reopen the last workspace/thread that may have caused it.
+      // Its data remains untouched; the user can still reach healthy workspaces from Home.
+      if (SafeModeService.isEnabled()) {
+        setInitialRoute({ path: PATHS.home, params: {} });
         setIsLoading(false);
         return;
       }

@@ -5,6 +5,7 @@ import ScheduledJobRunner from './runner';
 import { hydrateLanguage } from '@/i18n';
 import Telemetry from '@/utils/Telemetry';
 import PushNotifications from '@/utils/PushNotifications';
+export { SCHEDULED_JOBS_HEADLESS_TASK } from './constants';
 
 /**
  * Wakes the runner at the right times.
@@ -25,8 +26,6 @@ import PushNotifications from '@/utils/PushNotifications';
 const TICK_INTERVAL_MS = 60 * 1000;
 /** WorkManager stops a worker after 10 minutes - leave headroom for the last job to be saved. */
 const BACKGROUND_PASS_BUDGET_MS = 8 * 60 * 1000;
-
-export const SCHEDULED_JOBS_HEADLESS_TASK = 'ScheduledJobsTask';
 
 type ScheduledJobsNativeModule = {
     scheduleNextRun(atMillis: number): Promise<boolean>;
@@ -116,10 +115,11 @@ export async function runHeadlessScheduledJobs(): Promise<void> {
 }
 
 /** Mount once in `App` - runs due jobs while the app is open and keeps the background alarm armed. */
-export function useScheduledJobsTicker() {
+export function useScheduledJobsTicker(enabled: boolean = true) {
     const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
+        if (!enabled) return;
         const start = () => {
             if (timer.current) return;
             tick('foreground');
@@ -140,5 +140,5 @@ export function useScheduledJobsTicker() {
             stop();
             subscription.remove();
         };
-    }, []);
+    }, [enabled]);
 }

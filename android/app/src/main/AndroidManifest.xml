@@ -106,7 +106,7 @@
           android:resource="@xml/file_paths" />
       </provider>
       <activity
-        android:name="cat.ereza.customactivityoncrash.activity.DefaultErrorActivity"
+        android:name=".CrashRecoveryActivity"
         android:process=":error_activity"
         android:exported="false" />
       <receiver

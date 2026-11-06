@@ -1,5 +1,6 @@
 package com.anythingllm.vector
 
+import android.content.Context
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -41,23 +42,23 @@ class VectorBox(reactContext: ReactApplicationContext) : ReactContextBaseJavaMod
         private val lock = java.util.concurrent.locks.ReentrantLock()
     }
 
-    private val box: Box<VectorEntity>
-
-    init {
-        // Ensure singleton BoxStore
-        if (store == null) {
-            lock.withLock {
-                if (store == null) {
-                    store = MyObjectBox.builder()
-                        .androidContext(reactContext.applicationContext)
-                        .build()
-                }
-            }
-        }
-        box = store!!.boxFor(VectorEntity::class.java)
+    // Safe Mode can still create this lightweight bridge module; opening the
+    // ObjectBox store is deferred until a VectorDB method actually needs it.
+    private val box: Box<VectorEntity> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        getStore(reactContext.applicationContext).boxFor(VectorEntity::class.java)
     }
 
     override fun getName(): String = "VectorBox"
+
+    private fun getStore(context: Context): BoxStore {
+        store?.let { return it }
+        return lock.withLock {
+            store ?: MyObjectBox.builder()
+                .androidContext(context)
+                .build()
+                .also { store = it }
+        }
+    }
 
     @ReactMethod
     fun getCount(promise: Promise) {

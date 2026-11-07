@@ -17,6 +17,7 @@ import Document from "@/database/models/Document";
 import { estimateTokens, formatDocumentsBlock, type FullContextDocument } from "@/utils/documents/fullContext";
 import i18n from "@/i18n";
 import { SafeModeService } from '@/services/selfHealing/SafeModeService';
+import { sanitizeContextChunk, withContextTexts } from './contextUtils';
 
 interface BaseLLMProviderConfig {
   provider: string;
@@ -314,23 +315,8 @@ export default abstract class BaseOpenAILikeProvider {
   }
   static DEFAULT_MEMORY_TOKEN_BUDGET = 600;
 
-  /**
-   * Prepends the RAG chunks for this turn to the user's prompt, context first and question last so the
-   * model attends to what it is being asked. The chunks are only sent with the live prompt - history
-   * replays the raw stored prompt (see `formatChatHistory`) so stale chunks never pile up in later turns.
-   */
-  static withContextTexts(userPrompt: string, contextTexts: string[] = [], memoryBlock: string | null = null): string {
-    const blocks: string[] = [];
-    if (memoryBlock) blocks.push(memoryBlock);
-    if (contextTexts.length) {
-      const context = contextTexts
-        .map((text, i) => `Context ${i + 1}: ${text}`)
-        .join("\n\n");
-      blocks.push(`[CONTEXT_START]\n${context}\n[CONTEXT_END]`);
-    }
-    if (!blocks.length) return userPrompt;
-    return `${blocks.join('\n\n')}\n\n${userPrompt}`;
-  }
+  static sanitizeContextChunk = sanitizeContextChunk;
+  static withContextTexts = withContextTexts;
 
   /**
    * Hook for providers to fit the prompt to their context window before it is rendered:

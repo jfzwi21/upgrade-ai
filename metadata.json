@@ -1,0 +1,6 @@
+{
+  "name": "Upgrade AI",
+  "description": "On-device AI assistant with multi-provider LLM support, workspace RAG documents, and smart tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
